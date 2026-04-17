@@ -317,6 +317,17 @@ export async function serveFuelRequest(req, res, next) {
       })
     }
 
+    const maxAllowed = Number(
+      existing.approved_liters || existing.requested_liters || 0
+    )
+
+    if (liters > maxAllowed) {
+      return res.status(400).json({
+        success: false,
+        message: `La quantité servie ne peut pas dépasser ${maxAllowed} L`
+      })
+    }
+
     const { data, error } = await supabase
       .from('fuel_requests')
       .update({

@@ -41,28 +41,56 @@ export default function ConfirmFuelScreen({ route, navigation }) {
   }, [requestId])
 
   async function handleConfirm() {
-    if (!servedLiters || !amount) {
-      Alert.alert('Erreur', 'Tous les champs sont obligatoires')
-      return
-    }
-
-    try {
-      setSubmitting(true)
-      await api.patch(`/fuel-requests/${requestId}/serve`, {
-        pump_attendant_id: PUMP_ATTENDANT_ID,
-        served_liters: Number(servedLiters),
-        amount: Number(amount)
-      })
-
-      Alert.alert('Succès', 'Carburant confirmé')
-      navigation.goBack()
-    } catch (error) {
-      console.log('Erreur confirmation service:', error?.response?.data || error.message)
-      Alert.alert('Erreur', 'Impossible de confirmer la livraison')
-    } finally {
-      setSubmitting(false)
-    }
+  if (!servedLiters || !amount) {
+    Alert.alert('Erreur', 'Tous les champs sont obligatoires')
+    return
   }
+
+  const maxAllowed = Number(
+    request.approved_liters || request.requested_liters || 0
+  )
+
+  const servedValue = Number(servedLiters)
+  const amountValue = Number(amount)
+
+  if (Number.isNaN(servedValue) || servedValue <= 0) {
+    Alert.alert('Erreur', 'Entre une quantité servie valide')
+    return
+  }
+
+  if (Number.isNaN(amountValue) || amountValue < 0) {
+    Alert.alert('Erreur', 'Entre un montant valide')
+    return
+  }
+
+  if (servedValue > maxAllowed) {
+    Alert.alert(
+      'Erreur',
+      `La quantité servie ne peut pas dépasser ${maxAllowed} L`
+    )
+    return
+  }
+
+  try {
+    setSubmitting(true)
+    await api.patch(`/fuel-requests/${requestId}/serve`, {
+      pump_attendant_id: PUMP_ATTENDANT_ID,
+      served_liters: servedValue,
+      amount: amountValue
+    })
+
+    Alert.alert('Succès', 'Carburant confirmé')
+    navigation.goBack()
+  } catch (error) {
+    console.log('Erreur confirmation service:', error?.response?.data || error.message)
+    Alert.alert(
+      'Erreur',
+      error?.response?.data?.message || 'Impossible de confirmer la livraison'
+    )
+  } finally {
+    setSubmitting(false)
+  }
+}
 
   if (loading) {
     return (
