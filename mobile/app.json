@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "fuel-management",
+    "slug": "fuel-management",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "assetBundlePatterns": ["**/*"],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
