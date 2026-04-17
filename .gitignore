@@ -1,0 +1,48 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Expo / React Native
+.expo/
+.expo-shared/
+web-build/
+dist/
+build/
+
+# Metro / cache
+.cache/
+.tmp/
+temp/
+
+# Android / iOS
+android/.gradle/
+android/app/build/
+ios/build/
+*.xcworkspace
+DerivedData/
+
+# IDE
+.vscode/
+.idea/
+
+# Fly
+.fly/
+
+# Misc
+coverage/
