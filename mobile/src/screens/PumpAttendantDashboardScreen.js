@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -8,16 +8,48 @@ import {
   RefreshControl
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api } from '../api/client'
+
+const DRIVER_STRUCTURE_NAME_KEY = 'fuel_app_structure_name'
 
 export default function PumpAttendantDashboardScreen({ navigation }) {
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(false)
+  const [structureName, setStructureName] = useState('')
+
+  useEffect(() => {
+    loadStructureName()
+  }, [])
+
+  async function loadStructureName() {
+    try {
+      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
+      if (savedStructure) setStructureName(savedStructure)
+    } catch (error) {
+      console.log('Erreur lecture structure pompiste:', error.message)
+    }
+  }
 
   async function loadRequests() {
     try {
       setLoading(true)
-      const response = await api.get('/fuel-requests?status=approved')
+
+      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
+      const currentStructure = savedStructure || structureName
+
+      if (currentStructure) {
+        setStructureName(currentStructure)
+      }
+
+      const params = new URLSearchParams()
+      params.append('status', 'approved')
+
+      if (currentStructure) {
+        params.append('structure_name', currentStructure)
+      }
+
+      const response = await api.get(`/fuel-requests?${params.toString()}`)
       setRequests(response.data.data || [])
     } catch (error) {
       console.log('Erreur chargement pompiste:', error?.response?.data || error.message)
@@ -30,7 +62,7 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       loadRequests()
-    }, [])
+    }, [structureName])
   )
 
   function renderHeader() {
@@ -50,8 +82,15 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
 
           <Text style={styles.heroTitle}>Demandes prêtes au service</Text>
           <Text style={styles.heroText}>
-            Consulte uniquement les demandes validées par le chef et confirme la livraison.
+            Consulte les demandes validées et confirme la livraison.
           </Text>
+
+          <View style={styles.structureBox}>
+            <Text style={styles.structureLabel}>Structure</Text>
+            <Text style={styles.structureValue}>
+              {structureName || 'Non renseignée pour le moment'}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.sectionRow}>
@@ -100,6 +139,13 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
                   {item.approved_liters || item.requested_liters} L
                 </Text>
               </View>
+            </View>
+
+            <View style={styles.structureMetaBox}>
+              <Text style={styles.structureMetaLabel}>Structure</Text>
+              <Text style={styles.structureMetaValue}>
+                {item.structure_name || '—'}
+              </Text>
             </View>
 
             <View style={styles.footerRow}>
@@ -191,7 +237,25 @@ const styles = StyleSheet.create({
   heroText: {
     color: '#475569',
     fontSize: 15,
-    lineHeight: 22
+    lineHeight: 22,
+    marginBottom: 14
+  },
+  structureBox: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FED7AA'
+  },
+  structureLabel: {
+    color: '#9A3412',
+    fontSize: 12,
+    marginBottom: 4
+  },
+  structureValue: {
+    color: '#7C2D12',
+    fontSize: 15,
+    fontWeight: '800'
   },
   sectionRow: {
     marginBottom: 14
@@ -287,6 +351,24 @@ const styles = StyleSheet.create({
   infoValue: {
     color: '#0F172A',
     fontSize: 18,
+    fontWeight: '800'
+  },
+  structureMetaBox: {
+    marginTop: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  structureMetaLabel: {
+    color: '#64748B',
+    fontSize: 12,
+    marginBottom: 4
+  },
+  structureMetaValue: {
+    color: '#0F172A',
+    fontSize: 14,
     fontWeight: '800'
   },
   footerRow: {

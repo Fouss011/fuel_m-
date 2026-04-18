@@ -98,14 +98,53 @@ export default function ChiefDashboardScreen({ navigation }) {
 
             <View style={styles.heroTotal}>
               <Text style={styles.heroTotalValue}>{requests.length}</Text>
-              <Text style={styles.heroTotalLabel}>Résultats</Text>
+              <Text style={styles.heroTotalLabel}>Demandes</Text>
             </View>
           </View>
 
-          <Text style={styles.heroTitle}>Pilotage des demandes</Text>
+          <Text style={styles.heroTitle}>Pilotage carburant</Text>
           <Text style={styles.heroText}>
-            Valider, ajuster, filtrer et suivre toutes les opérations carburant.
+            Supervise les demandes, applique des filtres et suis les opérations en cours.
           </Text>
+        </View>
+
+        <View style={styles.structureCard}>
+          <View style={styles.structureHeader}>
+            <Text style={styles.structureTitle}>Structure</Text>
+            <Text style={styles.structureBadge}>À venir</Text>
+          </View>
+
+          <Text style={styles.structureText}>
+            La prochaine évolution rattachera automatiquement chaque demande à une structure
+            pour isoler les données par entreprise.
+          </Text>
+        </View>
+
+        <View style={styles.quickActionsCard}>
+          <Text style={styles.quickActionsTitle}>Actions structure</Text>
+
+          <TouchableOpacity
+            style={styles.quickActionButton}
+            onPress={() => navigation.navigate('CreateStructure')}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.quickActionButtonText}>Créer ma structure</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.quickActionButton, styles.quickActionButtonSecondary]}
+            onPress={() => navigation.navigate('TeamManagement')}
+            activeOpacity={0.9}
+          >
+            <Text
+              style={[
+                styles.quickActionButtonText,
+                styles.quickActionButtonSecondaryText
+              ]}
+            >
+              Gérer mon équipe
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -336,6 +375,74 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 15,
     lineHeight: 22
+  },
+  structureCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  structureHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  structureTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#0F172A'
+  },
+  structureBadge: {
+    backgroundColor: '#E2E8F0',
+    color: '#334155',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  structureText: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 21
+  },
+  quickActionsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  quickActionsTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 12
+  },
+  quickActionButton: {
+    backgroundColor: '#081B33',
+    borderRadius: 15,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginBottom: 10
+  },
+  quickActionButtonSecondary: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    marginBottom: 0
+  },
+  quickActionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 15
+  },
+  quickActionButtonSecondaryText: {
+    color: '#0F172A'
   },
   kpiScroll: {
     marginBottom: 14

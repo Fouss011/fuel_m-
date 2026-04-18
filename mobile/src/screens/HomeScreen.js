@@ -4,7 +4,7 @@ const ROLE_CARDS = [
   {
     key: 'driver',
     title: 'Chauffeur',
-    subtitle: 'Créer une demande, suivre l’évolution et consulter l’historique.',
+    subtitle: 'Créer une demande, suivre son évolution et consulter son historique.',
     emoji: '🚛',
     accent: '#2563EB',
     soft: '#DBEAFE',
@@ -13,7 +13,7 @@ const ROLE_CARDS = [
   {
     key: 'chief',
     title: 'Chef',
-    subtitle: 'Valider, ajuster et superviser toutes les opérations carburant.',
+    subtitle: 'Valider les demandes, piloter l’activité et superviser l’équipe.',
     emoji: '🧾',
     accent: '#0F766E',
     soft: '#CCFBF1',
@@ -34,43 +34,27 @@ const ROLE_CARDS = [
 
 export default function HomeScreen({ navigation }) {
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={styles.hero}>
-        <View style={styles.heroOverlay} />
-
-        <View style={styles.heroBadge}>
-          <Text style={styles.heroBadgeText}>Plateforme métier</Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.introCard}>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>Plateforme métier</Text>
         </View>
 
-        <Text style={styles.title}>Gestion professionnelle du carburant</Text>
+        <Text style={styles.title}>Gestion carburant</Text>
 
         <Text style={styles.subtitle}>
-          Une interface claire pour centraliser les demandes, les validations
-          et les confirmations de service avec une traçabilité simple.
+          Choisis un espace pour continuer.
         </Text>
-
-        <View style={styles.heroStatsRow}>
-          <View style={styles.heroStatCard}>
-            <Text style={styles.heroStatValue}>3</Text>
-            <Text style={styles.heroStatLabel}>Espaces</Text>
-          </View>
-
-          <View style={styles.heroStatCard}>
-            <Text style={styles.heroStatValue}>Fluide</Text>
-            <Text style={styles.heroStatLabel}>Parcours</Text>
-          </View>
-
-          <View style={styles.heroStatCard}>
-            <Text style={styles.heroStatValue}>Suivi</Text>
-            <Text style={styles.heroStatLabel}>Complet</Text>
-          </View>
-        </View>
       </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Choisir un espace</Text>
-        <Text style={styles.sectionSubtitle}>
-          Sélectionne le rôle adapté pour accéder à ton interface.
+      <View style={styles.rolesHeader}>
+        <Text style={styles.rolesTitle}>Les 3 espaces</Text>
+        <Text style={styles.rolesSubtitle}>
+          Accède directement à l’interface adaptée à ton rôle.
         </Text>
       </View>
 
@@ -101,14 +85,18 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
       ))}
 
-      <View style={styles.bottomInfo}>
-        <View style={styles.bottomInfoHeader}>
-          <Text style={styles.bottomInfoTitle}>Cycle opérationnel</Text>
-          <Text style={styles.bottomInfoBadge}>Traçable</Text>
+      <View style={styles.bottomCard}>
+        <View style={styles.bottomHeader}>
+          <Text style={styles.bottomTitle}>Fonctionnement</Text>
+          <Text style={styles.bottomBadge}>Simple</Text>
         </View>
 
-        <Text style={styles.bottomInfoText}>
+        <Text style={styles.bottomText}>
           Chauffeur → validation du chef → confirmation du pompiste
+        </Text>
+
+        <Text style={styles.bottomHint}>
+          Prochaine évolution : séparation des données par structure pour un usage multi-entreprises.
         </Text>
       </View>
     </ScrollView>
@@ -124,89 +112,54 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 32
   },
-  hero: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: '#081B33',
-    borderRadius: 28,
-    padding: 22,
-    marginBottom: 24,
-    shadowColor: '#081B33',
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 6
+  introCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 3
   },
-  heroOverlay: {
-    position: 'absolute',
-    right: -40,
-    top: -30,
-    width: 180,
-    height: 180,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.05)'
-  },
-  heroBadge: {
+  badge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: '#E2E8F0',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    marginBottom: 14
+    marginBottom: 12
   },
-  heroBadgeText: {
-    color: '#E2E8F0',
+  badgeText: {
+    color: '#334155',
     fontSize: 12,
     fontWeight: '800'
   },
   title: {
-    fontSize: 30,
-    lineHeight: 38,
+    fontSize: 28,
+    lineHeight: 34,
     fontWeight: '900',
-    color: '#FFFFFF',
-    marginBottom: 10
+    color: '#0F172A',
+    marginBottom: 8
   },
   subtitle: {
     fontSize: 15,
-    lineHeight: 23,
-    color: '#CBD5E1',
-    marginBottom: 20,
-    maxWidth: '92%'
+    lineHeight: 22,
+    color: '#475569'
   },
-  heroStatsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    flexWrap: 'wrap'
-  },
-  heroStatCard: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    minWidth: 95,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)'
-  },
-  heroStatValue: {
-    color: '#FFFFFF',
-    fontSize: 21,
-    fontWeight: '900',
-    marginBottom: 4
-  },
-  heroStatLabel: {
-    color: '#CBD5E1',
-    fontSize: 13
-  },
-  sectionHeader: {
+  rolesHeader: {
     marginBottom: 14
   },
-  sectionTitle: {
+  rolesTitle: {
     fontSize: 22,
     fontWeight: '900',
     color: '#0F172A',
     marginBottom: 6
   },
-  sectionSubtitle: {
+  rolesSubtitle: {
     color: '#475569',
     fontSize: 15,
     lineHeight: 22
@@ -279,26 +232,26 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     marginLeft: 8
   },
-  bottomInfo: {
-    marginTop: 8,
+  bottomCard: {
+    marginTop: 6,
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     padding: 18,
     borderWidth: 1,
     borderColor: '#E2E8F0'
   },
-  bottomInfoHeader: {
+  bottomHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10
   },
-  bottomInfoTitle: {
+  bottomTitle: {
     fontSize: 17,
     fontWeight: '900',
     color: '#0F172A'
   },
-  bottomInfoBadge: {
+  bottomBadge: {
     backgroundColor: '#E2E8F0',
     color: '#334155',
     paddingHorizontal: 10,
@@ -307,9 +260,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800'
   },
-  bottomInfoText: {
+  bottomText: {
     color: '#475569',
     lineHeight: 21,
-    fontSize: 14
+    fontSize: 14,
+    marginBottom: 8
+  },
+  bottomHint: {
+    color: '#64748B',
+    lineHeight: 20,
+    fontSize: 13
   }
 })

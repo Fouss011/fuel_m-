@@ -41,56 +41,56 @@ export default function ConfirmFuelScreen({ route, navigation }) {
   }, [requestId])
 
   async function handleConfirm() {
-  if (!servedLiters || !amount) {
-    Alert.alert('Erreur', 'Tous les champs sont obligatoires')
-    return
-  }
+    if (!servedLiters || !amount) {
+      Alert.alert('Erreur', 'Tous les champs sont obligatoires')
+      return
+    }
 
-  const maxAllowed = Number(
-    request.approved_liters || request.requested_liters || 0
-  )
-
-  const servedValue = Number(servedLiters)
-  const amountValue = Number(amount)
-
-  if (Number.isNaN(servedValue) || servedValue <= 0) {
-    Alert.alert('Erreur', 'Entre une quantité servie valide')
-    return
-  }
-
-  if (Number.isNaN(amountValue) || amountValue < 0) {
-    Alert.alert('Erreur', 'Entre un montant valide')
-    return
-  }
-
-  if (servedValue > maxAllowed) {
-    Alert.alert(
-      'Erreur',
-      `La quantité servie ne peut pas dépasser ${maxAllowed} L`
+    const maxAllowed = Number(
+      request.approved_liters || request.requested_liters || 0
     )
-    return
-  }
 
-  try {
-    setSubmitting(true)
-    await api.patch(`/fuel-requests/${requestId}/serve`, {
-      pump_attendant_id: PUMP_ATTENDANT_ID,
-      served_liters: servedValue,
-      amount: amountValue
-    })
+    const servedValue = Number(servedLiters)
+    const amountValue = Number(amount)
 
-    Alert.alert('Succès', 'Carburant confirmé')
-    navigation.goBack()
-  } catch (error) {
-    console.log('Erreur confirmation service:', error?.response?.data || error.message)
-    Alert.alert(
-      'Erreur',
-      error?.response?.data?.message || 'Impossible de confirmer la livraison'
-    )
-  } finally {
-    setSubmitting(false)
+    if (Number.isNaN(servedValue) || servedValue <= 0) {
+      Alert.alert('Erreur', 'Entre une quantité servie valide')
+      return
+    }
+
+    if (Number.isNaN(amountValue) || amountValue < 0) {
+      Alert.alert('Erreur', 'Entre un montant valide')
+      return
+    }
+
+    if (servedValue > maxAllowed) {
+      Alert.alert(
+        'Erreur',
+        `La quantité servie ne peut pas dépasser ${maxAllowed} L`
+      )
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      await api.patch(`/fuel-requests/${requestId}/serve`, {
+        pump_attendant_id: PUMP_ATTENDANT_ID,
+        served_liters: servedValue,
+        amount: amountValue
+      })
+
+      Alert.alert('Succès', 'Carburant confirmé')
+      navigation.goBack()
+    } catch (error) {
+      console.log('Erreur confirmation service:', error?.response?.data || error.message)
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message || 'Impossible de confirmer la livraison'
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
-}
 
   if (loading) {
     return (
@@ -109,7 +109,11 @@ export default function ConfirmFuelScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.heroCard}>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>CONFIRMATION</Text>
@@ -122,6 +126,11 @@ export default function ConfirmFuelScreen({ route, navigation }) {
       </View>
 
       <View style={styles.card}>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Structure</Text>
+          <Text style={styles.infoValue}>{request.structure_name || '—'}</Text>
+        </View>
+
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Chauffeur</Text>
           <Text style={styles.infoValue}>
@@ -144,6 +153,10 @@ export default function ConfirmFuelScreen({ route, navigation }) {
 
       <View style={styles.formCard}>
         <Text style={styles.formTitle}>Saisie du service</Text>
+
+        <Text style={styles.formHint}>
+          Dans la version complète, le pompiste ne verra et ne confirmera que les demandes validées de sa structure.
+        </Text>
 
         <Text style={styles.label}>Litres réellement servis</Text>
         <TextInput
@@ -257,6 +270,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     color: '#0F172A',
+    marginBottom: 8
+  },
+  formHint: {
+    color: '#64748B',
+    lineHeight: 20,
+    fontSize: 13,
     marginBottom: 14
   },
   label: {

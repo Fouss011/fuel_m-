@@ -14,6 +14,7 @@ import { api } from '../api/client'
 
 const DRIVER_NAME_KEY = 'fuel_app_driver_name'
 const DRIVER_HISTORY_KEY = 'fuel_app_driver_history'
+const DRIVER_STRUCTURE_NAME_KEY = 'fuel_app_structure_name'
 
 const TABS = [
   { key: 'new', label: 'Nouvelle' },
@@ -26,19 +27,23 @@ const TABS = [
 export default function DriverDashboardScreen({ navigation }) {
   const [requests, setRequests] = useState([])
   const [localName, setLocalName] = useState('')
+  const [structureName, setStructureName] = useState('')
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('new')
 
   useEffect(() => {
-    loadLocalName()
+    loadLocalData()
   }, [])
 
-  async function loadLocalName() {
+  async function loadLocalData() {
     try {
       const savedName = await AsyncStorage.getItem(DRIVER_NAME_KEY)
+      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
+
       if (savedName) setLocalName(savedName)
+      if (savedStructure) setStructureName(savedStructure)
     } catch (error) {
-      console.log('Erreur lecture nom local:', error.message)
+      console.log('Erreur lecture données locales chauffeur:', error.message)
     }
   }
 
@@ -47,7 +52,10 @@ export default function DriverDashboardScreen({ navigation }) {
       setLoading(true)
 
       const savedName = await AsyncStorage.getItem(DRIVER_NAME_KEY)
+      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
+
       const currentName = savedName || localName
+      const currentStructure = savedStructure || structureName
 
       if (!currentName) {
         const localHistoryRaw = await AsyncStorage.getItem(DRIVER_HISTORY_KEY)
@@ -57,14 +65,19 @@ export default function DriverDashboardScreen({ navigation }) {
       }
 
       setLocalName(currentName)
+      setStructureName(currentStructure || '')
 
-      const response = await api.get(
-        `/fuel-requests?driver_name=${encodeURIComponent(currentName)}`
-      )
+      const params = new URLSearchParams()
+      params.append('driver_name', currentName)
 
+      if (currentStructure) {
+        params.append('structure_name', currentStructure)
+      }
+
+      const response = await api.get(`/fuel-requests?${params.toString()}`)
       setRequests(response.data.data || [])
     } catch (error) {
-      console.log('Erreur chargement demandes:', error?.response?.data || error.message)
+      console.log('Erreur chargement demandes chauffeur:', error?.response?.data || error.message)
 
       try {
         const localHistoryRaw = await AsyncStorage.getItem(DRIVER_HISTORY_KEY)
@@ -81,7 +94,7 @@ export default function DriverDashboardScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       loadRequests()
-    }, [localName])
+    }, [localName, structureName])
   )
 
   function renderStatus(status) {
@@ -137,6 +150,13 @@ export default function DriverDashboardScreen({ navigation }) {
           <Text style={styles.heroText}>
             {localName ? `Nom enregistré : ${localName}` : 'Aucun nom enregistré pour le moment'}
           </Text>
+
+          <View style={styles.structureBox}>
+            <Text style={styles.structureLabel}>Structure</Text>
+            <Text style={styles.structureValue}>
+              {structureName || 'Non renseignée pour le moment'}
+            </Text>
+          </View>
         </View>
 
         <ScrollView
@@ -181,7 +201,7 @@ export default function DriverDashboardScreen({ navigation }) {
           <View style={styles.newRequestCard}>
             <Text style={styles.newRequestTitle}>Créer une nouvelle demande</Text>
             <Text style={styles.newRequestText}>
-              Lance une nouvelle demande de carburant pour ton camion.
+              Lance une nouvelle demande de carburant pour ton camion dans ton espace de travail.
             </Text>
 
             <TouchableOpacity
@@ -282,6 +302,13 @@ export default function DriverDashboardScreen({ navigation }) {
                 </View>
               </View>
 
+              <View style={styles.cardBottomMeta}>
+                <Text style={styles.structureMetaLabel}>Structure</Text>
+                <Text style={styles.structureMetaValue}>
+                  {item.structure_name || '—'}
+                </Text>
+              </View>
+
               <View style={styles.footerRow}>
                 <View>
                   <Text style={styles.amountLabel}>Montant</Text>
@@ -370,7 +397,25 @@ const styles = StyleSheet.create({
   heroText: {
     color: '#475569',
     fontSize: 15,
-    lineHeight: 22
+    lineHeight: 22,
+    marginBottom: 14
+  },
+  structureBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  structureLabel: {
+    color: '#64748B',
+    fontSize: 12,
+    marginBottom: 4
+  },
+  structureValue: {
+    color: '#0F172A',
+    fontSize: 15,
+    fontWeight: '800'
   },
   tabsScroll: {
     marginBottom: 16
@@ -544,6 +589,25 @@ const styles = StyleSheet.create({
   infoValue: {
     color: '#0F172A',
     fontSize: 18,
+    fontWeight: '800'
+  },
+  cardBottomMeta: {
+    marginTop: 2,
+    marginBottom: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  structureMetaLabel: {
+    color: '#64748B',
+    fontSize: 12,
+    marginBottom: 4
+  },
+  structureMetaValue: {
+    color: '#0F172A',
+    fontSize: 14,
     fontWeight: '800'
   },
   footerRow: {

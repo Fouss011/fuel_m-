@@ -45,18 +45,28 @@ export default function RequestDetailsScreen({ route, navigation }) {
       return
     }
 
+    const liters = Number(approvedLiters)
+
+    if (Number.isNaN(liters) || liters <= 0) {
+      Alert.alert('Erreur', 'Entre une quantité valide')
+      return
+    }
+
     try {
       setSubmitting(true)
       await api.patch(`/fuel-requests/${requestId}/approve`, {
         chief_id: CHIEF_ID,
-        approved_liters: Number(approvedLiters)
+        approved_liters: liters
       })
 
       Alert.alert('Succès', 'Demande validée')
       navigation.goBack()
     } catch (error) {
       console.log('Erreur validation:', error?.response?.data || error.message)
-      Alert.alert('Erreur', 'Impossible de valider la demande')
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message || 'Impossible de valider la demande'
+      )
     } finally {
       setSubmitting(false)
     }
@@ -73,7 +83,10 @@ export default function RequestDetailsScreen({ route, navigation }) {
       navigation.goBack()
     } catch (error) {
       console.log('Erreur refus:', error?.response?.data || error.message)
-      Alert.alert('Erreur', 'Impossible de refuser la demande')
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message || 'Impossible de refuser la demande'
+      )
     } finally {
       setSubmitting(false)
     }
@@ -114,7 +127,11 @@ export default function RequestDetailsScreen({ route, navigation }) {
   const status = renderStatus(request.status)
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.heroCard}>
         <View style={styles.heroTop}>
           <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
@@ -131,6 +148,11 @@ export default function RequestDetailsScreen({ route, navigation }) {
       </View>
 
       <View style={styles.card}>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Structure</Text>
+          <Text style={styles.infoValue}>{request.structure_name || '—'}</Text>
+        </View>
+
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Chauffeur</Text>
           <Text style={styles.infoValue}>
@@ -178,6 +200,10 @@ export default function RequestDetailsScreen({ route, navigation }) {
       {isPending ? (
         <View style={styles.formCard}>
           <Text style={styles.formTitle}>Décision du chef</Text>
+
+          <Text style={styles.formHint}>
+            Dans la version multi-structure complète, cette validation sera limitée à la structure du chef connecté.
+          </Text>
 
           <Text style={styles.label}>Quantité autorisée</Text>
           <TextInput
@@ -292,6 +318,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '900',
     color: '#0F172A',
+    marginBottom: 8
+  },
+  formHint: {
+    color: '#64748B',
+    lineHeight: 20,
+    fontSize: 13,
     marginBottom: 14
   },
   label: {

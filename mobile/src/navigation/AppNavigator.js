@@ -8,6 +8,8 @@ import PumpAttendantDashboardScreen from '../screens/PumpAttendantDashboardScree
 import RequestDetailsScreen from '../screens/RequestDetailsScreen'
 import ConfirmFuelScreen from '../screens/ConfirmFuelScreen'
 import PinAccessScreen from '../screens/PinAccessScreen'
+import CreateStructureScreen from '../screens/CreateStructureScreen'
+import TeamManagementScreen from '../screens/TeamManagementScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -79,6 +81,18 @@ export default function AppNavigator() {
         name="ConfirmFuel"
         component={ConfirmFuelScreen}
         options={{ title: 'Confirmation carburant' }}
+      />
+
+      <Stack.Screen
+        name="CreateStructure"
+        component={CreateStructureScreen}
+        options={{ title: 'Créer une structure' }}
+      />
+
+      <Stack.Screen
+        name="TeamManagement"
+        component={TeamManagementScreen}
+        options={{ title: 'Gestion équipe' }}
       />
     </Stack.Navigator>
   )

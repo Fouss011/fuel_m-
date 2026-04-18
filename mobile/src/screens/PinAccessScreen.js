@@ -20,8 +20,8 @@ export default function PinAccessScreen({ route, navigation }) {
   const isChief = role === 'chief'
   const title = isChief ? 'Accès chef' : 'Accès pompiste'
   const subtitle = isChief
-    ? 'Saisis le code sécurisé pour accéder à l’espace de validation et de suivi.'
-    : 'Saisis le code sécurisé pour accéder à l’espace de confirmation.'
+    ? 'Entre le code sécurisé pour accéder à l’espace de pilotage.'
+    : 'Entre le code sécurisé pour accéder à l’espace de confirmation.'
   const expectedPin = isChief ? PINS.chief : PINS.pump
   const targetScreen = isChief ? 'ChiefDashboard' : 'PumpAttendantDashboard'
   const badgeLabel = isChief ? 'CHEF' : 'POMPISTE'
@@ -39,24 +39,18 @@ export default function PinAccessScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.heroCard}>
+      <View style={styles.topCard}>
         <View style={[styles.badgeBase, badgeStyle]}>
           <Text style={badgeTextStyle}>{badgeLabel}</Text>
         </View>
 
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>{subtitle}</Text>
-
-        <View style={styles.infoBox}>
-          <Text style={styles.infoBoxTitle}>Accès protégé</Text>
-          <Text style={styles.infoBoxText}>
-            Cette zone est réservée au personnel autorisé. Entre le code PIN pour continuer.
-          </Text>
-        </View>
       </View>
 
       <View style={styles.formCard}>
         <Text style={styles.label}>Code PIN</Text>
+
         <TextInput
           style={styles.input}
           value={pin}
@@ -68,7 +62,19 @@ export default function PinAccessScreen({ route, navigation }) {
           maxLength={4}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleValidate} activeOpacity={0.9}>
+        <View style={styles.infoBox}>
+          <Text style={styles.infoTitle}>Accès protégé</Text>
+          <Text style={styles.infoText}>
+            Cette zone est réservée au personnel autorisé. Dans la prochaine version,
+            l’accès sera également rattaché à une structure spécifique.
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleValidate}
+          activeOpacity={0.9}
+        >
           <Text style={styles.buttonText}>Accéder à l’espace</Text>
         </TouchableOpacity>
       </View>
@@ -83,11 +89,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#F3F7FB'
   },
-  heroCard: {
-    backgroundColor: '#081B33',
-    borderRadius: 26,
-    padding: 22,
-    marginBottom: 14
+  topCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
   },
   badgeBase: {
     alignSelf: 'flex-start',
@@ -117,29 +125,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: '#0F172A',
     marginBottom: 8
   },
   subtitle: {
-    color: '#CBD5E1',
-    lineHeight: 21,
-    marginBottom: 18
-  },
-  infoBox: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 18,
-    padding: 14
-  },
-  infoBoxTitle: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 15,
-    marginBottom: 6
-  },
-  infoBoxText: {
-    color: '#CBD5E1',
-    lineHeight: 20,
-    fontSize: 13
+    color: '#475569',
+    lineHeight: 21
   },
   formCard: {
     backgroundColor: '#FFFFFF',
@@ -158,10 +149,29 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 15,
-    marginBottom: 18,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: '#CBD5E1',
     color: '#0F172A'
+  },
+  infoBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  infoTitle: {
+    color: '#0F172A',
+    fontWeight: '800',
+    fontSize: 15,
+    marginBottom: 6
+  },
+  infoText: {
+    color: '#64748B',
+    lineHeight: 20,
+    fontSize: 13
   },
   button: {
     backgroundColor: '#081B33',

@@ -13,6 +13,7 @@ import { api } from '../api/client'
 
 const DRIVER_NAME_KEY = 'fuel_app_driver_name'
 const DRIVER_HISTORY_KEY = 'fuel_app_driver_history'
+const DRIVER_STRUCTURE_NAME_KEY = 'fuel_app_structure_name'
 
 const FUEL_OPTIONS = [
   { label: 'Gasoil', value: 'gasoil' },
@@ -22,21 +23,28 @@ const FUEL_OPTIONS = [
 export default function NewFuelRequestScreen({ navigation }) {
   const [driverName, setDriverName] = useState('')
   const [truckNumber, setTruckNumber] = useState('')
+  const [structureName, setStructureName] = useState('')
   const [fuelType, setFuelType] = useState('gasoil')
   const [liters, setLiters] = useState('')
 
   useEffect(() => {
-    loadSavedDriverName()
+    loadSavedData()
   }, [])
 
-  async function loadSavedDriverName() {
+  async function loadSavedData() {
     try {
       const savedName = await AsyncStorage.getItem(DRIVER_NAME_KEY)
+      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
+
       if (savedName) {
         setDriverName(savedName)
       }
+
+      if (savedStructure) {
+        setStructureName(savedStructure)
+      }
     } catch (error) {
-      console.log('Erreur lecture nom chauffeur local:', error.message)
+      console.log('Erreur lecture données locales chauffeur:', error.message)
     }
   }
 
@@ -53,20 +61,37 @@ export default function NewFuelRequestScreen({ navigation }) {
 
   async function handleSubmit() {
     if (!driverName || !truckNumber || !fuelType || !liters) {
-      Alert.alert('Erreur', 'Tous les champs sont obligatoires')
+      Alert.alert('Erreur', 'Les champs chauffeur, camion, carburant et litres sont obligatoires')
+      return
+    }
+
+    const litersNumber = Number(liters)
+
+    if (Number.isNaN(litersNumber) || litersNumber <= 0) {
+      Alert.alert('Erreur', 'Le nombre de litres doit être supérieur à 0')
       return
     }
 
     try {
       const cleanName = driverName.trim()
+      const cleanTruck = truckNumber.trim().toUpperCase()
+      const cleanStructure = structureName.trim()
 
       await AsyncStorage.setItem(DRIVER_NAME_KEY, cleanName)
 
+      if (cleanStructure) {
+        await AsyncStorage.setItem(DRIVER_STRUCTURE_NAME_KEY, cleanStructure)
+      }
+
       const payload = {
         driver_name: cleanName,
-        truck_number: truckNumber,
+        truck_number: cleanTruck,
         fuel_type: fuelType,
-        requested_liters: Number(liters)
+        requested_liters: litersNumber
+      }
+
+      if (cleanStructure) {
+        payload.structure_name = cleanStructure
       }
 
       const response = await api.post('/fuel-requests', payload)
@@ -74,9 +99,10 @@ export default function NewFuelRequestScreen({ navigation }) {
       await saveLocalHistory({
         id: response?.data?.data?.id || Date.now(),
         driver_name: cleanName,
-        truck_number: truckNumber,
+        truck_number: cleanTruck,
         fuel_type: fuelType,
-        requested_liters: Number(liters),
+        requested_liters: litersNumber,
+        structure_name: cleanStructure || null,
         created_at: new Date().toISOString(),
         status: 'pending'
       })
@@ -90,7 +116,11 @@ export default function NewFuelRequestScreen({ navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.heroCard}>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>NOUVELLE OPÉRATION</Text>
@@ -111,6 +141,19 @@ export default function NewFuelRequestScreen({ navigation }) {
           value={driverName}
           onChangeText={setDriverName}
         />
+
+        <Text style={styles.label}>Structure</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ex : Transport Kossi SARL"
+          placeholderTextColor="#94A3B8"
+          value={structureName}
+          onChangeText={setStructureName}
+        />
+
+        <Text style={styles.helperText}>
+          Champ conseillé dès maintenant pour préparer la séparation par structure.
+        </Text>
 
         <Text style={styles.label}>Camion</Text>
         <TextInput
@@ -221,10 +264,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 15,
-    marginBottom: 18,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#CBD5E1',
     color: '#0F172A'
+  },
+  helperText: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 18
   },
   optionRow: {
     flexDirection: 'row',

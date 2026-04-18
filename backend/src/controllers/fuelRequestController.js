@@ -2,6 +2,78 @@ import { supabase } from '../config/supabaseClient.js'
 
 const VALID_STATUSES = ['pending', 'approved', 'rejected', 'served']
 
+function normalizeString(value) {
+  if (value === undefined || value === null) return null
+  const cleaned = String(value).trim()
+  return cleaned ? cleaned : null
+}
+
+function isMissingColumnError(error) {
+  const message = String(error?.message || '').toLowerCase()
+  return (
+    message.includes('column') &&
+    (
+      message.includes('structure_id') ||
+      message.includes('structure_name')
+    )
+  )
+}
+
+async function safeInsertFuelRequest(basePayload) {
+  let payload = { ...basePayload }
+
+  let result = await supabase
+    .from('fuel_requests')
+    .insert([payload])
+    .select()
+    .single()
+
+  if (!result.error) return result
+
+  if (payload.structure_id && isMissingColumnError(result.error)) {
+    const fallbackPayload = { ...payload }
+    delete fallbackPayload.structure_id
+
+    result = await supabase
+      .from('fuel_requests')
+      .insert([fallbackPayload])
+      .select()
+      .single()
+
+    if (!result.error) return result
+  }
+
+  if (payload.structure_name && isMissingColumnError(result.error)) {
+    const fallbackPayload = { ...payload }
+    delete fallbackPayload.structure_name
+
+    result = await supabase
+      .from('fuel_requests')
+      .insert([fallbackPayload])
+      .select()
+      .single()
+
+    if (!result.error) return result
+  }
+
+  if (
+    (payload.structure_id || payload.structure_name) &&
+    isMissingColumnError(result.error)
+  ) {
+    const fallbackPayload = { ...payload }
+    delete fallbackPayload.structure_id
+    delete fallbackPayload.structure_name
+
+    result = await supabase
+      .from('fuel_requests')
+      .insert([fallbackPayload])
+      .select()
+      .single()
+  }
+
+  return result
+}
+
 export async function createFuelRequest(req, res, next) {
   try {
     const {
@@ -9,7 +81,9 @@ export async function createFuelRequest(req, res, next) {
       driver_name,
       truck_number,
       fuel_type,
-      requested_liters
+      requested_liters,
+      structure_id,
+      structure_name
     } = req.body
 
     if (!driver_name || !truck_number || !fuel_type || requested_liters === undefined) {
@@ -36,13 +110,14 @@ export async function createFuelRequest(req, res, next) {
       status: 'pending'
     }
 
-    if (driver_id) payload.driver_id = driver_id
+    const cleanStructureId = normalizeString(structure_id)
+    const cleanStructureName = normalizeString(structure_name)
 
-    const { data, error } = await supabase
-      .from('fuel_requests')
-      .insert([payload])
-      .select()
-      .single()
+    if (driver_id) payload.driver_id = driver_id
+    if (cleanStructureId) payload.structure_id = cleanStructureId
+    if (cleanStructureName) payload.structure_name = cleanStructureName
+
+    const { data, error } = await safeInsertFuelRequest(payload)
 
     if (error) throw error
 
@@ -58,7 +133,15 @@ export async function createFuelRequest(req, res, next) {
 
 export async function getAllFuelRequests(req, res, next) {
   try {
-    const { status, role, user_id, driver_name, truck_number } = req.query
+    const {
+      status,
+      role,
+      user_id,
+      driver_name,
+      truck_number,
+      structure_id,
+      structure_name
+    } = req.query
 
     let query = supabase
       .from('fuel_requests')
@@ -92,9 +175,48 @@ export async function getAllFuelRequests(req, res, next) {
       query = query.ilike('truck_number', `%${truck_number}%`)
     }
 
+    if (structure_id) {
+      query = query.eq('structure_id', structure_id)
+    }
+
+    if (structure_name) {
+      query = query.ilike('structure_name', `%${structure_name}%`)
+    }
+
     const { data, error } = await query
 
-    if (error) throw error
+    if (error) {
+      if (
+        (structure_id || structure_name) &&
+        isMissingColumnError(error)
+      ) {
+        let fallbackQuery = supabase
+          .from('fuel_requests')
+          .select(`
+            *,
+            driver:users!fuel_requests_driver_id_fkey(id, name, phone, role),
+            chief:users!fuel_requests_chief_id_fkey(id, name, phone, role),
+            pump_attendant:users!fuel_requests_pump_attendant_id_fkey(id, name, phone, role)
+          `)
+          .order('created_at', { ascending: false })
+
+        if (status) fallbackQuery = fallbackQuery.eq('status', status)
+        if (role === 'driver' && user_id) fallbackQuery = fallbackQuery.eq('driver_id', user_id)
+        if (driver_name) fallbackQuery = fallbackQuery.ilike('driver_name', `%${driver_name}%`)
+        if (truck_number) fallbackQuery = fallbackQuery.ilike('truck_number', `%${truck_number}%`)
+
+        const fallbackResult = await fallbackQuery
+
+        if (fallbackResult.error) throw fallbackResult.error
+
+        return res.json({
+          success: true,
+          data: fallbackResult.data
+        })
+      }
+
+      throw error
+    }
 
     res.json({
       success: true,
