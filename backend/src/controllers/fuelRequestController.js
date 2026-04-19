@@ -68,6 +68,17 @@ async function getStructureById(structureId) {
   return data
 }
 
+async function getStructureByName(structureName) {
+  const { data, error } = await supabase
+    .from('structures')
+    .select('id, name')
+    .ilike('name', structureName)
+    .maybeSingle()
+
+  if (error) throw error
+  return data || null
+}
+
 async function getUserById(userId) {
   const { data, error } = await supabase
     .from('users')
@@ -101,8 +112,8 @@ export async function createFuelRequest(req, res, next) {
     const cleanDriverName = normalizeString(driver_name)
     const cleanTruckNumber = normalizeString(truck_number)?.toUpperCase() || null
     const cleanFuelType = normalizeString(fuel_type)
-    const cleanStructureId = parseId(structure_id) || context.structureId
-    const cleanStructureName = normalizeString(structure_name) || context.structureName
+    let finalStructureId = parseId(structure_id) || context.structureId
+    let finalStructureName = normalizeString(structure_name) || context.structureName
     const liters = parsePositiveNumber(requested_liters)
 
     if (!cleanDriverName || !cleanTruckNumber || !cleanFuelType || requested_liters === undefined) {
@@ -119,15 +130,12 @@ export async function createFuelRequest(req, res, next) {
       })
     }
 
-    if (!cleanStructureId && !cleanStructureName) {
+    if (!finalStructureId && !finalStructureName) {
       return res.status(400).json({
         success: false,
         message: 'La structure est obligatoire pour créer une demande'
       })
     }
-
-    let finalStructureId = cleanStructureId
-    let finalStructureName = cleanStructureName
 
     if (cleanDriverId) {
       const driver = await getUserById(cleanDriverId)
@@ -151,6 +159,20 @@ export async function createFuelRequest(req, res, next) {
       }
     }
 
+    if (!finalStructureId && finalStructureName) {
+      const structureByName = await getStructureByName(finalStructureName)
+
+      if (!structureByName) {
+        return res.status(404).json({
+          success: false,
+          message: 'Structure introuvable. Vérifie le nom de la structure.'
+        })
+      }
+
+      finalStructureId = structureByName.id
+      finalStructureName = structureByName.name
+    }
+
     if (finalStructureId) {
       const structure = await getStructureById(finalStructureId)
 
@@ -164,7 +186,7 @@ export async function createFuelRequest(req, res, next) {
       finalStructureName = structure.name
     }
 
-    if (!finalStructureId && !finalStructureName) {
+    if (!finalStructureId || !finalStructureName) {
       return res.status(400).json({
         success: false,
         message: 'Impossible de déterminer la structure liée à cette demande'
@@ -629,8 +651,7 @@ export async function serveFuelRequest(req, res, next) {
 
     res.json({
       success: true,
-      message: 'Livraison de carburant confirmée'
-      ,
+      message: 'Livraison de carburant confirmée',
       data
     })
   } catch (error) {
