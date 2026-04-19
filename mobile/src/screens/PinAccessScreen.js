@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
   ScrollView,
-  ActivityIndicator
+  ActivityIndicator,
+  TextInput
 } from 'react-native'
 import { api, saveSession } from '../api/client'
 
@@ -145,6 +145,48 @@ export default function PinAccessScreen({ route, navigation }) {
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#081B33" />
       </View>
+    )
+  }
+
+  if (structures.length === 0) {
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topCard}>
+          <View style={[styles.badgeBase, badgeStyle]}>
+            <Text style={badgeTextStyle}>{badgeLabel}</Text>
+          </View>
+
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>
+            {isChief
+              ? 'Aucune structure n’existe encore. Commence par créer ta structure.'
+              : 'Aucune structure n’est disponible pour le moment. Demande au chef de créer la structure d’abord.'}
+          </Text>
+        </View>
+
+        <View style={styles.formCard}>
+          {isChief ? (
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => navigation.replace('CreateStructure')}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.buttonText}>Créer ma structure</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.infoBox}>
+              <Text style={styles.infoTitle}>Structure manquante</Text>
+              <Text style={styles.infoText}>
+                Le pompiste ne peut pas se connecter tant qu’aucune structure n’a été créée par le chef.
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
     )
   }
 
