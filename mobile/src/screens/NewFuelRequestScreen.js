@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -28,12 +28,16 @@ export default function NewFuelRequestScreen({ navigation }) {
   const [driverId, setDriverId] = useState(null)
   const [driverName, setDriverName] = useState('')
   const [truckNumber, setTruckNumber] = useState('')
-  const [structureId, setStructureId] = useState(null)
-  const [structureName, setStructureName] = useState('')
+  const [structures, setStructures] = useState([])
+  const [selectedStructureId, setSelectedStructureId] = useState(null)
   const [fuelType, setFuelType] = useState('gasoil')
   const [liters, setLiters] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+
+  const selectedStructure = useMemo(() => {
+    return structures.find((item) => String(item.id) === String(selectedStructureId)) || null
+  }, [structures, selectedStructureId])
 
   useEffect(() => {
     loadSavedData()
@@ -48,28 +52,59 @@ export default function NewFuelRequestScreen({ navigation }) {
       const [
         savedDriverName,
         savedDriverId,
-        savedStructureId,
-        savedStructureName
+        savedStructureId
       ] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.driverName),
         AsyncStorage.getItem(STORAGE_KEYS.driverId),
-        AsyncStorage.getItem(STORAGE_KEYS.structureId),
-        AsyncStorage.getItem(STORAGE_KEYS.structureName)
+        AsyncStorage.getItem(STORAGE_KEYS.structureId)
       ])
+
+      const structuresResponse = await api.get('/structures')
+      const fetchedStructures = structuresResponse?.data?.data || []
+
+      setStructures(fetchedStructures)
 
       const finalDriverName = storedSession?.userName || savedDriverName || ''
       const finalDriverId = storedSession?.userId || savedDriverId || null
       const finalStructureId = storedSession?.structureId || savedStructureId || null
-      const finalStructureName = storedSession?.structureName || savedStructureName || ''
 
       if (finalDriverName) setDriverName(String(finalDriverName))
       if (finalDriverId) setDriverId(finalDriverId)
-      if (finalStructureId) setStructureId(finalStructureId)
-      if (finalStructureName) setStructureName(String(finalStructureName))
+
+      if (finalStructureId) {
+        const found = fetchedStructures.find(
+          (item) => String(item.id) === String(finalStructureId)
+        )
+        if (found) {
+          setSelectedStructureId(found.id)
+        } else if (fetchedStructures.length > 0) {
+          setSelectedStructureId(fetchedStructures[0].id)
+        }
+      } else if (fetchedStructures.length > 0) {
+        setSelectedStructureId(fetchedStructures[0].id)
+      }
+
+      console.log('Structures chargées chauffeur:', fetchedStructures)
+      console.log('Session chauffeur:', {
+        finalDriverName,
+        finalDriverId,
+        finalStructureId
+      })
     } catch (error) {
-      console.log('Erreur chargement infos chauffeur :', error.message)
+      console.log('Erreur chargement infos chauffeur :', error?.response?.data || error.message)
+      Alert.alert('Erreur', 'Impossible de charger les données chauffeur.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleSelectStructure(structure) {
+    setSelectedStructureId(structure.id)
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.structureId, String(structure.id))
+      await AsyncStorage.setItem(STORAGE_KEYS.structureName, structure.name)
+    } catch (error) {
+      console.log('Erreur sauvegarde structure locale :', error.message)
     }
   }
 
@@ -78,11 +113,15 @@ export default function NewFuelRequestScreen({ navigation }) {
 
     const cleanDriver = driverName.trim()
     const cleanTruck = truckNumber.trim().toUpperCase()
-    const cleanStructureName = structureName.trim()
     const litersNumber = Number(liters)
 
     if (!cleanDriver) {
       Alert.alert('Champ manquant', 'Le nom du chauffeur est obligatoire.')
+      return
+    }
+
+    if (!selectedStructure) {
+      Alert.alert('Structure obligatoire', 'Sélectionne une structure avant d’envoyer la demande.')
       return
     }
 
@@ -102,87 +141,60 @@ export default function NewFuelRequestScreen({ navigation }) {
     }
 
     if (Number.isNaN(litersNumber) || litersNumber <= 0) {
-      Alert.alert(
-        'Quantité invalide',
-        'Le nombre de litres doit être supérieur à 0.'
-      )
-      return
-    }
-
-    if (!structureId && !cleanStructureName) {
-      Alert.alert(
-        'Structure obligatoire',
-        'La structure est obligatoire avant d’envoyer une demande.'
-      )
+      Alert.alert('Quantité invalide', 'Le nombre de litres doit être supérieur à 0.')
       return
     }
 
     try {
       setSubmitting(true)
 
-      await AsyncStorage.setItem(STORAGE_KEYS.driverName, cleanDriver)
-
-      if (driverId) {
-        await AsyncStorage.setItem(STORAGE_KEYS.driverId, String(driverId))
-      }
-
-      if (structureId) {
-        await AsyncStorage.setItem(STORAGE_KEYS.structureId, String(structureId))
-      }
-
-      if (cleanStructureName) {
-        await AsyncStorage.setItem(STORAGE_KEYS.structureName, cleanStructureName)
-      }
-
       const payload = {
         driver_name: cleanDriver,
         truck_number: cleanTruck,
         fuel_type: fuelType,
-        requested_liters: litersNumber
+        requested_liters: litersNumber,
+        structure_id: Number(selectedStructure.id),
+        structure_name: selectedStructure.name
       }
 
       if (driverId) {
         payload.driver_id = Number(driverId)
       }
 
-      if (structureId) {
-        payload.structure_id = Number(structureId)
-      }
-
-      if (cleanStructureName) {
-        payload.structure_name = cleanStructureName
-      }
+      console.log('Payload envoyé à /fuel-requests :', payload)
 
       const response = await api.post('/fuel-requests', payload)
 
-      console.log('Demande créée :', response?.data)
+      console.log('Réponse création demande :', response?.data)
+
+      await AsyncStorage.setItem(STORAGE_KEYS.driverName, cleanDriver)
+      if (driverId) {
+        await AsyncStorage.setItem(STORAGE_KEYS.driverId, String(driverId))
+      }
+      await AsyncStorage.setItem(STORAGE_KEYS.structureId, String(selectedStructure.id))
+      await AsyncStorage.setItem(STORAGE_KEYS.structureName, selectedStructure.name)
 
       Alert.alert(
         'Demande envoyée',
-        'Votre demande est envoyée. Elle est maintenant en attente de confirmation du chef.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setTruckNumber('')
-              setLiters('')
-              setFuelType('gasoil')
-              navigation.goBack()
-            }
-          }
-        ]
+        'Votre demande est envoyée. Elle est maintenant en attente de confirmation du chef.'
       )
+
+      setTruckNumber('')
+      setLiters('')
+      setFuelType('gasoil')
     } catch (error) {
-      console.log(
-        'Erreur création demande :',
-        error?.response?.data || error.message
-      )
+      console.log('Erreur création demande détaillée :', {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        message: error?.message
+      })
 
-      const backendMessage =
+      Alert.alert(
+        'Échec de l’envoi',
         error?.response?.data?.message ||
-        'Impossible de créer la demande. Vérifie les champs obligatoires et réessaie.'
-
-      Alert.alert('Erreur', backendMessage)
+          error?.message ||
+          'Impossible de créer la demande.'
+      )
     } finally {
       setSubmitting(false)
     }
@@ -204,11 +216,9 @@ export default function NewFuelRequestScreen({ navigation }) {
     >
       <View style={styles.heroCard}>
         <Text style={styles.badge}>CHAUFFEUR</Text>
-
         <Text style={styles.heroTitle}>Nouvelle demande carburant</Text>
-
         <Text style={styles.heroSubtitle}>
-          La structure est reprise automatiquement quand elle est déjà connue.
+          Sélectionne la structure, puis renseigne le camion et la quantité.
         </Text>
       </View>
 
@@ -223,16 +233,32 @@ export default function NewFuelRequestScreen({ navigation }) {
         />
 
         <Text style={styles.label}>Structure</Text>
-        <TextInput
-          value={structureName}
-          onChangeText={setStructureName}
-          style={styles.input}
-          placeholder="Nom de la structure"
-          placeholderTextColor="#94A3B8"
-        />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+          style={styles.chipsScroll}
+        >
+          {structures.map((item) => {
+            const active = String(item.id) === String(selectedStructureId)
+
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => handleSelectStructure(item)}
+                activeOpacity={0.9}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
 
         <Text style={styles.helper}>
-          Après une première saisie, la structure reste enregistrée pour les prochaines demandes.
+          La structure choisie sera réutilisée automatiquement la prochaine fois.
         </Text>
 
         <Text style={styles.label}>Camion</Text>
@@ -246,27 +272,17 @@ export default function NewFuelRequestScreen({ navigation }) {
         />
 
         <Text style={styles.label}>Type de carburant</Text>
-
         <View style={styles.optionRow}>
           {FUEL_OPTIONS.map((option) => {
             const selected = fuelType === option.value
-
             return (
               <TouchableOpacity
                 key={option.value}
-                style={[
-                  styles.optionButton,
-                  selected && styles.optionButtonActive
-                ]}
+                style={[styles.optionButton, selected && styles.optionButtonActive]}
                 onPress={() => setFuelType(option.value)}
                 activeOpacity={0.9}
               >
-                <Text
-                  style={[
-                    styles.optionText,
-                    selected && styles.optionTextActive
-                  ]}
-                >
+                <Text style={[styles.optionText, selected && styles.optionTextActive]}>
                   {option.label}
                 </Text>
               </TouchableOpacity>
@@ -366,11 +382,35 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 12
   },
+  chipsScroll: {
+    marginBottom: 12
+  },
+  chipsRow: {
+    paddingRight: 8
+  },
+  chip: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    marginRight: 8
+  },
+  chipActive: {
+    backgroundColor: '#081B33'
+  },
+  chipText: {
+    color: '#0F172A',
+    fontWeight: '800',
+    fontSize: 13
+  },
+  chipTextActive: {
+    color: '#FFFFFF'
+  },
   helper: {
     color: '#64748B',
     fontSize: 12,
     marginBottom: 12,
-    marginTop: -4
+    marginTop: -2
   },
   optionRow: {
     flexDirection: 'row',
