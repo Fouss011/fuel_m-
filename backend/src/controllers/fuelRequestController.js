@@ -23,11 +23,9 @@ function parseOptionalNumber(value) {
 
 function parseId(value) {
   const normalized = normalizeString(value)
-
   if (!normalized) return null
 
   const parsed = Number(normalized)
-
   if (!Number.isInteger(parsed) || parsed <= 0) return NaN
 
   return parsed
@@ -40,16 +38,17 @@ function getContext(req) {
       parseId(req.headers['x-user-id']) ||
       parseId(req.query.user_id) ||
       parseId(req.body?.driver_id) ||
-      parseId(req.body?.chief_id) ||
-      parseId(req.body?.pump_attendant_id),
+      null,
     structureId:
       parseId(req.headers['x-structure-id']) ||
       parseId(req.query.structure_id) ||
-      parseId(req.body?.structure_id),
+      parseId(req.body?.structure_id) ||
+      null,
     structureName:
       normalizeString(req.headers['x-structure-name']) ||
       normalizeString(req.query.structure_name) ||
-      normalizeString(req.body?.structure_name)
+      normalizeString(req.body?.structure_name) ||
+      null
   }
 }
 
@@ -69,10 +68,13 @@ async function getStructureById(structureId) {
 }
 
 async function getStructureByName(structureName) {
+  const cleanName = normalizeString(structureName)
+  if (!cleanName) return null
+
   const { data, error } = await supabase
     .from('structures')
     .select('id, name')
-    .ilike('name', structureName)
+    .ilike('name', cleanName)
     .maybeSingle()
 
   if (error) throw error
@@ -94,115 +96,120 @@ async function getUserById(userId) {
   return data
 }
 
+async function resolveStructure({ structureId, structureName, driverId }) {
+  let finalStructureId = structureId || null
+  let finalStructureName = structureName || null
+
+  if (!finalStructureId && driverId) {
+    const driver = await getUserById(driverId)
+
+    if (!driver) {
+      throw {
+        status: 404,
+        success: false,
+        message: 'Chauffeur introuvable'
+      }
+    }
+
+    if (driver.role !== 'driver') {
+      throw {
+        status: 400,
+        success: false,
+        message: 'L’utilisateur fourni n’est pas un chauffeur'
+      }
+    }
+
+    if (driver.structure_id) {
+      finalStructureId = driver.structure_id
+    }
+  }
+
+  if (!finalStructureId && finalStructureName) {
+    const structureByName = await getStructureByName(finalStructureName)
+
+    if (!structureByName) {
+      throw {
+        status: 404,
+        success: false,
+        message: 'Structure introuvable. Vérifie le nom de la structure.'
+      }
+    }
+
+    finalStructureId = structureByName.id
+    finalStructureName = structureByName.name
+  }
+
+  if (finalStructureId) {
+    const structureById = await getStructureById(finalStructureId)
+
+    if (!structureById) {
+      throw {
+        status: 404,
+        success: false,
+        message: 'Structure introuvable'
+      }
+    }
+
+    finalStructureId = structureById.id
+    finalStructureName = structureById.name
+  }
+
+  if (!finalStructureId || !finalStructureName) {
+    throw {
+      status: 400,
+      success: false,
+      message: 'Impossible de déterminer la structure liée à cette demande'
+    }
+  }
+
+  return {
+    structure_id: finalStructureId,
+    structure_name: finalStructureName
+  }
+}
+
 export async function createFuelRequest(req, res, next) {
   try {
-    const {
-      driver_id,
-      driver_name,
-      truck_number,
-      fuel_type,
-      requested_liters,
-      structure_id,
-      structure_name
-    } = req.body
-
     const context = getContext(req)
 
-    const cleanDriverId = parseId(driver_id) || context.userId
-    const cleanDriverName = normalizeString(driver_name)
-    const cleanTruckNumber = normalizeString(truck_number)?.toUpperCase() || null
-    const cleanFuelType = normalizeString(fuel_type)
-    let finalStructureId = parseId(structure_id) || context.structureId
-    let finalStructureName = normalizeString(structure_name) || context.structureName
-    const liters = parsePositiveNumber(requested_liters)
+    const cleanDriverId = parseId(req.body?.driver_id) || context.userId
+    const cleanDriverName = normalizeString(req.body?.driver_name)
+    const cleanTruckNumber = normalizeString(req.body?.truck_number)?.toUpperCase() || null
+    const cleanFuelType = normalizeString(req.body?.fuel_type)
+    const requestedLiters = parsePositiveNumber(req.body?.requested_liters)
 
-    if (!cleanDriverName || !cleanTruckNumber || !cleanFuelType || requested_liters === undefined) {
+    if (!cleanDriverName || !cleanTruckNumber || !cleanFuelType || req.body?.requested_liters === undefined) {
       return res.status(400).json({
         success: false,
         message: 'driver_name, truck_number, fuel_type et requested_liters sont obligatoires'
       })
     }
 
-    if (Number.isNaN(liters)) {
+    if (Number.isNaN(requestedLiters)) {
       return res.status(400).json({
         success: false,
         message: 'requested_liters doit être un nombre supérieur à 0'
       })
     }
 
-    if (!finalStructureId && !finalStructureName) {
-      return res.status(400).json({
-        success: false,
-        message: 'La structure est obligatoire pour créer une demande'
-      })
-    }
-
-    if (cleanDriverId) {
-      const driver = await getUserById(cleanDriverId)
-
-      if (!driver) {
-        return res.status(404).json({
-          success: false,
-          message: 'Chauffeur introuvable'
-        })
-      }
-
-      if (driver.role !== 'driver') {
-        return res.status(400).json({
-          success: false,
-          message: 'L’utilisateur fourni n’est pas un chauffeur'
-        })
-      }
-
-      if (!finalStructureId && driver.structure_id) {
-        finalStructureId = driver.structure_id
-      }
-    }
-
-    if (!finalStructureId && finalStructureName) {
-      const structureByName = await getStructureByName(finalStructureName)
-
-      if (!structureByName) {
-        return res.status(404).json({
-          success: false,
-          message: 'Structure introuvable. Vérifie le nom de la structure.'
-        })
-      }
-
-      finalStructureId = structureByName.id
-      finalStructureName = structureByName.name
-    }
-
-    if (finalStructureId) {
-      const structure = await getStructureById(finalStructureId)
-
-      if (!structure) {
-        return res.status(404).json({
-          success: false,
-          message: 'Structure introuvable'
-        })
-      }
-
-      finalStructureName = structure.name
-    }
-
-    if (!finalStructureId || !finalStructureName) {
-      return res.status(400).json({
-        success: false,
-        message: 'Impossible de déterminer la structure liée à cette demande'
-      })
-    }
+    const resolvedStructure = await resolveStructure({
+      structureId: parseId(req.body?.structure_id) || context.structureId,
+      structureName: normalizeString(req.body?.structure_name) || context.structureName,
+      driverId: cleanDriverId
+    })
 
     const payload = {
-      structure_id: finalStructureId,
-      structure_name: finalStructureName,
+      structure_id: resolvedStructure.structure_id,
+      structure_name: resolvedStructure.structure_name,
       driver_id: cleanDriverId || null,
       driver_name: cleanDriverName,
       truck_number: cleanTruckNumber,
       fuel_type: cleanFuelType,
-      requested_liters: liters,
+      requested_liters: requestedLiters,
       status: 'pending'
     }
+
+    console.log('Payload final fuel request:', payload)
 
     const { data, error } = await supabase
       .from('fuel_requests')
@@ -217,36 +224,33 @@ export async function createFuelRequest(req, res, next) {
 
     if (error) throw error
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'Demande de carburant créée avec succès',
       data
     })
   } catch (error) {
+    if (error?.success === false) {
+      return res.status(error.status || 400).json(error)
+    }
+
     next(error)
   }
 }
 
 export async function getAllFuelRequests(req, res, next) {
   try {
-    const {
-      status,
-      role,
-      user_id,
-      driver_name,
-      truck_number,
-      structure_id,
-      structure_name
-    } = req.query
-
     const context = getContext(req)
 
-    const cleanRole = normalizeString(role) || context.role
-    const cleanUserId = parseId(user_id) || context.userId
-    const cleanStructureId = parseId(structure_id) || context.structureId
-    const cleanStructureName = normalizeString(structure_name) || context.structureName
+    const status = normalizeString(req.query.status)
+    const role = normalizeString(req.query.role) || context.role
+    const userId = parseId(req.query.user_id) || context.userId
+    const structureId = parseId(req.query.structure_id) || context.structureId
+    const structureName = normalizeString(req.query.structure_name) || context.structureName
+    const driverName = normalizeString(req.query.driver_name)
+    const truckNumber = normalizeString(req.query.truck_number)
 
-    if (!cleanStructureId && !cleanStructureName) {
+    if (!structureId && !structureName) {
       return res.status(400).json({
         success: false,
         message: 'La structure est obligatoire pour charger les demandes'
@@ -273,22 +277,22 @@ export async function getAllFuelRequests(req, res, next) {
       query = query.eq('status', status)
     }
 
-    if (cleanStructureId) {
-      query = query.eq('structure_id', cleanStructureId)
-    } else if (cleanStructureName) {
-      query = query.ilike('structure_name', cleanStructureName)
+    if (structureId) {
+      query = query.eq('structure_id', structureId)
+    } else {
+      query = query.ilike('structure_name', structureName)
     }
 
-    if (cleanRole === 'driver' && cleanUserId) {
-      query = query.eq('driver_id', cleanUserId)
+    if (role === 'driver' && userId) {
+      query = query.eq('driver_id', userId)
     }
 
-    if (driver_name) {
-      query = query.ilike('driver_name', `%${String(driver_name).trim()}%`)
+    if (driverName) {
+      query = query.ilike('driver_name', `%${driverName}%`)
     }
 
-    if (truck_number) {
-      query = query.ilike('truck_number', `%${String(truck_number).trim()}%`)
+    if (truckNumber) {
+      query = query.ilike('truck_number', `%${truckNumber}%`)
     }
 
     const { data, error } = await query
@@ -306,8 +310,8 @@ export async function getAllFuelRequests(req, res, next) {
 
 export async function getFuelRequestById(req, res, next) {
   try {
-    const { id } = req.params
     const context = getContext(req)
+    const { id } = req.params
 
     const { data, error } = await supabase
       .from('fuel_requests')
@@ -330,7 +334,7 @@ export async function getFuelRequestById(req, res, next) {
       throw error
     }
 
-    if (context.structureId && data.structure_id !== context.structureId) {
+    if (context.structureId && Number(data.structure_id) !== Number(context.structureId)) {
       return res.status(403).json({
         success: false,
         message: 'Accès refusé à cette demande'
@@ -338,8 +342,7 @@ export async function getFuelRequestById(req, res, next) {
     }
 
     if (!context.structureId && context.structureName) {
-      const requestStructureName = normalizeString(data.structure_name)
-      if (requestStructureName !== context.structureName) {
+      if (normalizeString(data.structure_name) !== context.structureName) {
         return res.status(403).json({
           success: false,
           message: 'Accès refusé à cette demande'
@@ -358,14 +361,12 @@ export async function getFuelRequestById(req, res, next) {
 
 export async function approveFuelRequest(req, res, next) {
   try {
-    const { id } = req.params
-    const { chief_id, approved_liters } = req.body
     const context = getContext(req)
+    const { id } = req.params
+    const chiefId = parseId(req.body?.chief_id) || context.userId
+    const liters = parsePositiveNumber(req.body?.approved_liters)
 
-    const cleanChiefId = parseId(chief_id) || context.userId
-    const liters = parsePositiveNumber(approved_liters)
-
-    if (!cleanChiefId || approved_liters === undefined) {
+    if (!chiefId || req.body?.approved_liters === undefined) {
       return res.status(400).json({
         success: false,
         message: 'chief_id et approved_liters sont obligatoires'
@@ -379,7 +380,7 @@ export async function approveFuelRequest(req, res, next) {
       })
     }
 
-    const chief = await getUserById(cleanChiefId)
+    const chief = await getUserById(chiefId)
 
     if (!chief) {
       return res.status(404).json({
@@ -418,7 +419,7 @@ export async function approveFuelRequest(req, res, next) {
       })
     }
 
-    if (chief.structure_id !== existing.structure_id) {
+    if (Number(chief.structure_id) !== Number(existing.structure_id)) {
       return res.status(403).json({
         success: false,
         message: 'Ce chef ne peut pas valider une demande d’une autre structure'
@@ -428,7 +429,7 @@ export async function approveFuelRequest(req, res, next) {
     const { data, error } = await supabase
       .from('fuel_requests')
       .update({
-        chief_id: cleanChiefId,
+        chief_id: chiefId,
         approved_liters: liters,
         status: 'approved',
         approved_at: new Date().toISOString()
@@ -456,20 +457,18 @@ export async function approveFuelRequest(req, res, next) {
 
 export async function rejectFuelRequest(req, res, next) {
   try {
-    const { id } = req.params
-    const { chief_id } = req.body
     const context = getContext(req)
+    const { id } = req.params
+    const chiefId = parseId(req.body?.chief_id) || context.userId
 
-    const cleanChiefId = parseId(chief_id) || context.userId
-
-    if (!cleanChiefId) {
+    if (!chiefId) {
       return res.status(400).json({
         success: false,
         message: 'chief_id est obligatoire'
       })
     }
 
-    const chief = await getUserById(cleanChiefId)
+    const chief = await getUserById(chiefId)
 
     if (!chief) {
       return res.status(404).json({
@@ -508,7 +507,7 @@ export async function rejectFuelRequest(req, res, next) {
       })
     }
 
-    if (chief.structure_id !== existing.structure_id) {
+    if (Number(chief.structure_id) !== Number(existing.structure_id)) {
       return res.status(403).json({
         success: false,
         message: 'Ce chef ne peut pas refuser une demande d’une autre structure'
@@ -518,7 +517,7 @@ export async function rejectFuelRequest(req, res, next) {
     const { data, error } = await supabase
       .from('fuel_requests')
       .update({
-        chief_id: cleanChiefId,
+        chief_id: chiefId,
         status: 'rejected',
         approved_at: new Date().toISOString()
       })
@@ -545,15 +544,13 @@ export async function rejectFuelRequest(req, res, next) {
 
 export async function serveFuelRequest(req, res, next) {
   try {
-    const { id } = req.params
-    const { pump_attendant_id, served_liters, amount } = req.body
     const context = getContext(req)
+    const { id } = req.params
+    const pumpId = parseId(req.body?.pump_attendant_id) || context.userId
+    const liters = parsePositiveNumber(req.body?.served_liters)
+    const amount = parseOptionalNumber(req.body?.amount)
 
-    const cleanPumpId = parseId(pump_attendant_id) || context.userId
-    const liters = parsePositiveNumber(served_liters)
-    const totalAmount = parseOptionalNumber(amount)
-
-    if (!cleanPumpId || served_liters === undefined || amount === undefined || amount === '') {
+    if (!pumpId || req.body?.served_liters === undefined || req.body?.amount === undefined || req.body?.amount === '') {
       return res.status(400).json({
         success: false,
         message: 'pump_attendant_id, served_liters et amount sont obligatoires'
@@ -567,14 +564,14 @@ export async function serveFuelRequest(req, res, next) {
       })
     }
 
-    if (Number.isNaN(totalAmount) || totalAmount === null || totalAmount < 0) {
+    if (Number.isNaN(amount) || amount === null || amount < 0) {
       return res.status(400).json({
         success: false,
         message: 'Le montant est obligatoire et doit être un nombre valide'
       })
     }
 
-    const pump = await getUserById(cleanPumpId)
+    const pump = await getUserById(pumpId)
 
     if (!pump) {
       return res.status(404).json({
@@ -613,7 +610,7 @@ export async function serveFuelRequest(req, res, next) {
       })
     }
 
-    if (pump.structure_id !== existing.structure_id) {
+    if (Number(pump.structure_id) !== Number(existing.structure_id)) {
       return res.status(403).json({
         success: false,
         message: 'Ce pompiste ne peut pas servir une demande d’une autre structure'
@@ -632,9 +629,9 @@ export async function serveFuelRequest(req, res, next) {
     const { data, error } = await supabase
       .from('fuel_requests')
       .update({
-        pump_attendant_id: cleanPumpId,
+        pump_attendant_id: pumpId,
         served_liters: liters,
-        amount: totalAmount,
+        amount,
         status: 'served',
         served_at: new Date().toISOString()
       })
