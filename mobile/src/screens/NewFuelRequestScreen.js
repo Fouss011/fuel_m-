@@ -1,3 +1,5 @@
+// mobile/src/screens/NewFuelRequestScreen.js
+
 import { useEffect, useState } from 'react'
 import {
   View,
@@ -11,9 +13,12 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api } from '../api/client'
 
-const DRIVER_NAME_KEY = 'fuel_app_driver_name'
-const DRIVER_HISTORY_KEY = 'fuel_app_driver_history'
-const DRIVER_STRUCTURE_NAME_KEY = 'fuel_app_structure_name'
+const STORAGE_KEYS = {
+  driverName: 'fuel_app_driver_name',
+  driverId: 'fuel_app_user_id',
+  structureId: 'fuel_app_structure_id',
+  structureName: 'fuel_app_structure_name'
+}
 
 const FUEL_OPTIONS = [
   { label: 'Gasoil', value: 'gasoil' },
@@ -21,11 +26,14 @@ const FUEL_OPTIONS = [
 ]
 
 export default function NewFuelRequestScreen({ navigation }) {
+  const [driverId, setDriverId] = useState(null)
   const [driverName, setDriverName] = useState('')
   const [truckNumber, setTruckNumber] = useState('')
+  const [structureId, setStructureId] = useState(null)
   const [structureName, setStructureName] = useState('')
   const [fuelType, setFuelType] = useState('gasoil')
   const [liters, setLiters] = useState('')
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     loadSavedData()
@@ -33,85 +41,126 @@ export default function NewFuelRequestScreen({ navigation }) {
 
   async function loadSavedData() {
     try {
-      const savedName = await AsyncStorage.getItem(DRIVER_NAME_KEY)
-      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
+      const [
+        savedDriverName,
+        savedDriverId,
+        savedStructureId,
+        savedStructureName
+      ] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.driverName),
+        AsyncStorage.getItem(STORAGE_KEYS.driverId),
+        AsyncStorage.getItem(STORAGE_KEYS.structureId),
+        AsyncStorage.getItem(STORAGE_KEYS.structureName)
+      ])
 
-      if (savedName) {
-        setDriverName(savedName)
-      }
-
-      if (savedStructure) {
-        setStructureName(savedStructure)
-      }
+      if (savedDriverName) setDriverName(savedDriverName)
+      if (savedDriverId) setDriverId(savedDriverId)
+      if (savedStructureId) setStructureId(savedStructureId)
+      if (savedStructureName) setStructureName(savedStructureName)
     } catch (error) {
-      console.log('Erreur lecture données locales chauffeur:', error.message)
-    }
-  }
-
-  async function saveLocalHistory(entry) {
-    try {
-      const current = await AsyncStorage.getItem(DRIVER_HISTORY_KEY)
-      const parsed = current ? JSON.parse(current) : []
-      const next = [entry, ...parsed].slice(0, 50)
-      await AsyncStorage.setItem(DRIVER_HISTORY_KEY, JSON.stringify(next))
-    } catch (error) {
-      console.log('Erreur sauvegarde historique local:', error.message)
+      console.log('Erreur chargement infos chauffeur :', error.message)
     }
   }
 
   async function handleSubmit() {
-    if (!driverName || !truckNumber || !fuelType || !liters) {
-      Alert.alert('Erreur', 'Les champs chauffeur, camion, carburant et litres sont obligatoires')
+    if (loading) return
+
+    const cleanDriver = driverName.trim()
+    const cleanTruck = truckNumber.trim().toUpperCase()
+    const cleanStructureName = structureName.trim()
+    const litersNumber = Number(liters)
+
+    if (!cleanDriver) {
+      Alert.alert('Champ manquant', 'Le nom du chauffeur est obligatoire.')
       return
     }
 
-    const litersNumber = Number(liters)
+    if (!cleanTruck) {
+      Alert.alert('Champ manquant', 'Le numéro du camion est obligatoire.')
+      return
+    }
+
+    if (!fuelType) {
+      Alert.alert('Champ manquant', 'Choisis un type de carburant.')
+      return
+    }
+
+    if (!liters) {
+      Alert.alert('Champ manquant', 'Le nombre de litres demandé est obligatoire.')
+      return
+    }
 
     if (Number.isNaN(litersNumber) || litersNumber <= 0) {
-      Alert.alert('Erreur', 'Le nombre de litres doit être supérieur à 0')
+      Alert.alert(
+        'Quantité invalide',
+        'Le nombre de litres doit être supérieur à 0.'
+      )
+      return
+    }
+
+    // structure désormais obligatoire dans tout le parcours
+    if (!structureId && !cleanStructureName) {
+      Alert.alert(
+        'Structure obligatoire',
+        'Tu dois être rattaché à une structure avant de créer une demande.'
+      )
       return
     }
 
     try {
-      const cleanName = driverName.trim()
-      const cleanTruck = truckNumber.trim().toUpperCase()
-      const cleanStructure = structureName.trim()
+      setLoading(true)
 
-      await AsyncStorage.setItem(DRIVER_NAME_KEY, cleanName)
-
-      if (cleanStructure) {
-        await AsyncStorage.setItem(DRIVER_STRUCTURE_NAME_KEY, cleanStructure)
-      }
+      await AsyncStorage.setItem(STORAGE_KEYS.driverName, cleanDriver)
 
       const payload = {
-        driver_name: cleanName,
+        driver_name: cleanDriver,
         truck_number: cleanTruck,
         fuel_type: fuelType,
         requested_liters: litersNumber
       }
 
-      if (cleanStructure) {
-        payload.structure_name = cleanStructure
+      // plus d’ID codé en dur : on récupère la vraie structure du chauffeur connecté
+      if (driverId) {
+        payload.driver_id = Number(driverId)
+      }
+
+      if (structureId) {
+        payload.structure_id = Number(structureId)
+      }
+
+      if (cleanStructureName) {
+        payload.structure_name = cleanStructureName
       }
 
       const response = await api.post('/fuel-requests', payload)
 
-      await saveLocalHistory({
-        id: response?.data?.data?.id || Date.now(),
-        driver_name: cleanName,
-        truck_number: cleanTruck,
-        fuel_type: fuelType,
-        requested_liters: litersNumber,
-        structure_name: cleanStructure || null,
-        created_at: new Date().toISOString(),
-        status: 'pending'
-      })
+      Alert.alert(
+        'Demande envoyée',
+        'La demande de carburant a été créée et liée à ta structure.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.goBack()
+            }
+          }
+        ]
+      )
 
-      Alert.alert('Succès', 'Demande envoyée')
-      navigation.goBack()
+      console.log('Demande créée :', response.data)
     } catch (error) {
-      console.log('Erreur création demande:', error?.response?.data || error.message)
-      Alert.alert('Erreur', 'Impossible de créer la demande')
+      console.log(
+        'Erreur création demande :',
+        error?.response?.data || error.message
+      )
+
+      const backendMessage =
+        error?.response?.data?.message ||
+        'Impossible de créer la demande. Vérifie les informations et réessaie.'
+
+      Alert.alert('Erreur', backendMessage)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -122,66 +171,71 @@ export default function NewFuelRequestScreen({ navigation }) {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.heroCard}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>NOUVELLE OPÉRATION</Text>
-        </View>
+        <Text style={styles.badge}>CHAUFFEUR</Text>
 
-        <Text style={styles.heroTitle}>Créer une demande de carburant</Text>
-        <Text style={styles.heroText}>
-          Renseigne les informations du chauffeur, du camion et la quantité demandée.
+        <Text style={styles.heroTitle}>Nouvelle demande carburant</Text>
+
+        <Text style={styles.heroSubtitle}>
+          Toutes les demandes sont maintenant automatiquement liées à ta structure.
         </Text>
       </View>
 
-      <View style={styles.formCard}>
-        <Text style={styles.label}>Nom du chauffeur</Text>
+      <View style={styles.card}>
+        <Text style={styles.label}>Chauffeur</Text>
         <TextInput
-          style={styles.input}
-          placeholder="Ex : Kossi"
-          placeholderTextColor="#94A3B8"
           value={driverName}
           onChangeText={setDriverName}
+          placeholder="Nom du chauffeur"
+          style={styles.input}
+          placeholderTextColor="#94A3B8"
         />
 
         <Text style={styles.label}>Structure</Text>
         <TextInput
-          style={styles.input}
-          placeholder="Ex : Transport Kossi SARL"
-          placeholderTextColor="#94A3B8"
           value={structureName}
-          onChangeText={setStructureName}
+          editable={false}
+          style={[styles.input, styles.disabledInput]}
+          placeholder="Aucune structure"
+          placeholderTextColor="#94A3B8"
         />
 
-        <Text style={styles.helperText}>
-          Champ conseillé dès maintenant pour préparer la séparation par structure.
+        <Text style={styles.helper}>
+          La structure est obligatoire et provient du compte connecté.
         </Text>
 
         <Text style={styles.label}>Camion</Text>
         <TextInput
-          style={styles.input}
-          placeholder="Ex : TG-1234-AB"
-          placeholderTextColor="#94A3B8"
           value={truckNumber}
           onChangeText={setTruckNumber}
+          placeholder="Ex : TG-2458-AB"
           autoCapitalize="characters"
+          style={styles.input}
+          placeholderTextColor="#94A3B8"
         />
 
         <Text style={styles.label}>Type de carburant</Text>
+
         <View style={styles.optionRow}>
           {FUEL_OPTIONS.map((option) => {
-            const active = fuelType === option.value
+            const selected = fuelType === option.value
 
             return (
               <TouchableOpacity
                 key={option.value}
-                style={[styles.optionCard, active && styles.optionCardActive]}
+                style={[
+                  styles.optionButton,
+                  selected && styles.optionButtonActive
+                ]}
                 onPress={() => setFuelType(option.value)}
                 activeOpacity={0.9}
               >
-                <Text style={[styles.optionTitle, active && styles.optionTitleActive]}>
+                <Text
+                  style={[
+                    styles.optionText,
+                    selected && styles.optionTextActive
+                  ]}
+                >
                   {option.label}
-                </Text>
-                <Text style={[styles.optionHint, active && styles.optionHintActive]}>
-                  Sélectionner
                 </Text>
               </TouchableOpacity>
             )
@@ -190,16 +244,23 @@ export default function NewFuelRequestScreen({ navigation }) {
 
         <Text style={styles.label}>Nombre de litres</Text>
         <TextInput
-          style={styles.input}
-          keyboardType="numeric"
-          placeholder="100"
-          placeholderTextColor="#94A3B8"
           value={liters}
           onChangeText={setLiters}
+          placeholder="Ex : 120"
+          keyboardType="numeric"
+          style={styles.input}
+          placeholderTextColor="#94A3B8"
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleSubmit} activeOpacity={0.9}>
-          <Text style={styles.buttonText}>Envoyer la demande</Text>
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleSubmit}
+          activeOpacity={0.9}
+          disabled={loading}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? 'Envoi en cours...' : 'Envoyer la demande'}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -213,40 +274,37 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 30
+    paddingBottom: 40
   },
   heroCard: {
     backgroundColor: '#081B33',
-    borderRadius: 26,
+    borderRadius: 24,
     padding: 20,
     marginBottom: 16
   },
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 999,
+    color: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    marginBottom: 12
-  },
-  badgeText: {
-    color: '#E2E8F0',
-    fontSize: 11,
+    borderRadius: 999,
     fontWeight: '900',
-    letterSpacing: 0.5
+    fontSize: 12,
+    marginBottom: 14
   },
   heroTitle: {
-    fontSize: 25,
-    fontWeight: '900',
     color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '900',
     marginBottom: 8
   },
-  heroText: {
+  heroSubtitle: {
     color: '#CBD5E1',
     fontSize: 14,
     lineHeight: 21
   },
-  formCard: {
+  card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 18,
@@ -254,67 +312,66 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0'
   },
   label: {
-    marginBottom: 8,
+    color: '#0F172A',
     fontWeight: '800',
     fontSize: 14,
-    color: '#0F172A'
+    marginBottom: 8,
+    marginTop: 4
   },
   input: {
     backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 15,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    color: '#0F172A'
+    color: '#0F172A',
+    marginBottom: 12
   },
-  helperText: {
+  disabledInput: {
+    backgroundColor: '#EEF2F7',
+    color: '#475569'
+  },
+  helper: {
     color: '#64748B',
     fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 18
+    marginBottom: 12,
+    marginTop: -4
   },
   optionRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 18
+    marginBottom: 14
   },
-  optionCard: {
+  optionButton: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#CBD5E1'
+    borderColor: '#CBD5E1',
+    borderRadius: 16,
+    paddingVertical: 15,
+    alignItems: 'center'
   },
-  optionCardActive: {
+  optionButtonActive: {
     backgroundColor: '#081B33',
     borderColor: '#081B33'
   },
-  optionTitle: {
+  optionText: {
     color: '#0F172A',
-    fontWeight: '900',
-    fontSize: 15,
-    marginBottom: 4
+    fontWeight: '800'
   },
-  optionTitleActive: {
+  optionTextActive: {
     color: '#FFFFFF'
-  },
-  optionHint: {
-    color: '#64748B',
-    fontSize: 12
-  },
-  optionHintActive: {
-    color: '#CBD5E1'
   },
   button: {
     backgroundColor: '#081B33',
-    borderRadius: 16,
+    borderRadius: 18,
     paddingVertical: 17,
     alignItems: 'center',
-    marginTop: 6
+    marginTop: 10
+  },
+  buttonDisabled: {
+    opacity: 0.7
   },
   buttonText: {
     color: '#FFFFFF',

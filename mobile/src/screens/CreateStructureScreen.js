@@ -8,10 +8,9 @@ import {
   Alert,
   ScrollView
 } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { api } from '../api/client'
+import { saveSession } from '../api/client'
 
-const DRIVER_STRUCTURE_NAME_KEY = 'fuel_app_structure_name'
+const PIN_REGEX = /^\d{4,8}$/
 
 export default function CreateStructureScreen({ navigation }) {
   const [name, setName] = useState('')
@@ -22,36 +21,102 @@ export default function CreateStructureScreen({ navigation }) {
   const [loading, setLoading] = useState(false)
 
   async function handleCreateStructure() {
-    if (!name.trim()) {
-      Alert.alert('Erreur', 'Le nom de la structure est obligatoire')
+    const cleanName = name.trim()
+    const cleanOwnerName = ownerName.trim()
+    const cleanOwnerPhone = ownerPhone.trim()
+    const cleanPinChief = pinChief.trim()
+    const cleanPinPump = pinPump.trim()
+
+    if (!cleanName) {
+      Alert.alert('Nom requis', 'Le nom de la structure est obligatoire.')
+      return
+    }
+
+    if (!cleanOwnerName) {
+      Alert.alert('Responsable requis', 'Le nom du responsable est obligatoire.')
+      return
+    }
+
+    if (!cleanOwnerPhone) {
+      Alert.alert('Téléphone requis', 'Le téléphone du responsable est obligatoire.')
+      return
+    }
+
+    if (!cleanPinChief) {
+      Alert.alert('PIN chef requis', 'Le code PIN chef est obligatoire.')
+      return
+    }
+
+    if (!cleanPinPump) {
+      Alert.alert('PIN pompiste requis', 'Le code PIN pompiste est obligatoire.')
+      return
+    }
+
+    if (!PIN_REGEX.test(cleanPinChief)) {
+      Alert.alert(
+        'PIN chef invalide',
+        'Le code PIN chef doit contenir entre 4 et 8 chiffres.'
+      )
+      return
+    }
+
+    if (!PIN_REGEX.test(cleanPinPump)) {
+      Alert.alert(
+        'PIN pompiste invalide',
+        'Le code PIN pompiste doit contenir entre 4 et 8 chiffres.'
+      )
+      return
+    }
+
+    if (cleanPinChief === cleanPinPump) {
+      Alert.alert(
+        'PIN invalides',
+        'Le PIN chef et le PIN pompiste doivent être différents.'
+      )
       return
     }
 
     try {
       setLoading(true)
 
-      const payload = {
-        name: name.trim(),
-        owner_name: ownerName.trim() || null,
-        owner_phone: ownerPhone.trim() || null,
-        pin_chief: pinChief.trim() || null,
-        pin_pump: pinPump.trim() || null
+      const { api } = await import('../api/client')
+
+      const structurePayload = {
+        name: cleanName,
+        owner_name: cleanOwnerName,
+        owner_phone: cleanOwnerPhone,
+        pin_chief: cleanPinChief,
+        pin_pump: cleanPinPump
       }
 
-      const response = await api.post('/structures', payload)
-      const createdStructure = response?.data?.data
+      const structureResponse = await api.post('/structures', structurePayload)
+      const createdStructure = structureResponse?.data?.data
+      const createdChief = createdStructure?.chief_user || null
 
-      if (createdStructure?.name) {
-        await AsyncStorage.setItem(DRIVER_STRUCTURE_NAME_KEY, createdStructure.name)
+      if (!createdStructure?.id) {
+        throw new Error('Structure créée mais identifiant introuvable')
       }
 
-      Alert.alert('Succès', 'Structure créée avec succès')
-      navigation.goBack()
+      await saveSession({
+        userId: createdChief?.id || null,
+        userName: createdChief?.name || cleanOwnerName,
+        role: 'chief',
+        structureId: createdStructure.id,
+        structureName: createdStructure.name
+      })
+
+      Alert.alert(
+        'Succès',
+        'Structure créée et chef automatiquement rattaché.'
+      )
+
+      navigation.replace('ChiefDashboard')
     } catch (error) {
       console.log('Erreur création structure:', error?.response?.data || error.message)
+
       Alert.alert(
         'Erreur',
-        error?.response?.data?.message || 'Impossible de créer la structure'
+        error?.response?.data?.message || 'Impossible de créer la structure.'
       )
     } finally {
       setLoading(false)
@@ -71,8 +136,8 @@ export default function CreateStructureScreen({ navigation }) {
 
         <Text style={styles.title}>Créer une structure</Text>
         <Text style={styles.subtitle}>
-          Le chef crée l’espace de travail de son entreprise pour isoler les demandes,
-          l’équipe et l’historique.
+          Le chef crée l’espace de travail de son entreprise et devient automatiquement
+          responsable de cette structure.
         </Text>
       </View>
 
@@ -113,7 +178,8 @@ export default function CreateStructureScreen({ navigation }) {
           value={pinChief}
           onChangeText={setPinChief}
           keyboardType="numeric"
-          maxLength={6}
+          maxLength={8}
+          secureTextEntry
         />
 
         <Text style={styles.label}>PIN Pompiste</Text>
@@ -124,8 +190,17 @@ export default function CreateStructureScreen({ navigation }) {
           value={pinPump}
           onChangeText={setPinPump}
           keyboardType="numeric"
-          maxLength={6}
+          maxLength={8}
+          secureTextEntry
         />
+
+        <View style={styles.infoBox}>
+          <Text style={styles.infoTitle}>Création complète</Text>
+          <Text style={styles.infoText}>
+            La structure est créée avec son chef principal automatiquement rattaché.
+            Tu n’as plus besoin de créer le chef une deuxième fois.
+          </Text>
+        </View>
 
         <TouchableOpacity
           style={styles.button}
@@ -202,6 +277,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#CBD5E1',
     color: '#0F172A'
+  },
+  infoBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  infoTitle: {
+    color: '#0F172A',
+    fontWeight: '800',
+    fontSize: 15,
+    marginBottom: 6
+  },
+  infoText: {
+    color: '#64748B',
+    lineHeight: 20,
+    fontSize: 13
   },
   button: {
     backgroundColor: '#081B33',

@@ -9,13 +9,13 @@ import {
   TextInput,
   ScrollView
 } from 'react-native'
-import { api } from '../api/client'
-
-const CHIEF_ID = 2
+import { api, getStoredSession } from '../api/client'
 
 export default function RequestDetailsScreen({ route, navigation }) {
   const { requestId } = route.params
+
   const [request, setRequest] = useState(null)
+  const [session, setSession] = useState(null)
   const [approvedLiters, setApprovedLiters] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -23,13 +23,21 @@ export default function RequestDetailsScreen({ route, navigation }) {
   async function loadRequest() {
     try {
       setLoading(true)
+
+      const storedSession = await getStoredSession()
+      setSession(storedSession)
+
       const response = await api.get(`/fuel-requests/${requestId}`)
-      const data = response.data.data
+      const data = response?.data?.data
+
       setRequest(data)
-      setApprovedLiters(String(data.approved_liters || data.requested_liters || ''))
+      setApprovedLiters(String(data?.approved_liters || data?.requested_liters || ''))
     } catch (error) {
       console.log('Erreur détail demande:', error?.response?.data || error.message)
-      Alert.alert('Erreur', 'Impossible de charger la demande')
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message || 'Impossible de charger la demande.'
+      )
     } finally {
       setLoading(false)
     }
@@ -40,32 +48,68 @@ export default function RequestDetailsScreen({ route, navigation }) {
   }, [requestId])
 
   async function handleApprove() {
-    if (!approvedLiters) {
-      Alert.alert('Erreur', 'La quantité autorisée est obligatoire')
+    if (!session?.userId) {
+      Alert.alert(
+        'Session manquante',
+        'Aucune session chef active. Reconnecte-toi avant de valider.'
+      )
+      return
+    }
+
+    if (!approvedLiters?.trim()) {
+      Alert.alert('Champ obligatoire', 'La quantité autorisée est obligatoire.')
       return
     }
 
     const liters = Number(approvedLiters)
+    const requestedValue = Number(request?.requested_liters || 0)
 
     if (Number.isNaN(liters) || liters <= 0) {
-      Alert.alert('Erreur', 'Entre une quantité valide')
+      Alert.alert('Valeur invalide', 'Entre une quantité valide.')
       return
+    }
+
+    if (requestedValue > 0 && liters > requestedValue) {
+      Alert.alert(
+        'Quantité invalide',
+        `La quantité autorisée ne peut pas dépasser ${requestedValue} L.`
+      )
+      return
+    }
+
+    if (session?.structureId && request?.structure_id) {
+      if (Number(session.structureId) !== Number(request.structure_id)) {
+        Alert.alert(
+          'Structure invalide',
+          'Tu ne peux valider que les demandes de ta structure.'
+        )
+        return
+      }
+    } else if (session?.structureName && request?.structure_name) {
+      if (session.structureName !== request.structure_name) {
+        Alert.alert(
+          'Structure invalide',
+          'Tu ne peux valider que les demandes de ta structure.'
+        )
+        return
+      }
     }
 
     try {
       setSubmitting(true)
+
       await api.patch(`/fuel-requests/${requestId}/approve`, {
-        chief_id: CHIEF_ID,
+        chief_id: session.userId,
         approved_liters: liters
       })
 
-      Alert.alert('Succès', 'Demande validée')
+      Alert.alert('Succès', 'Demande validée.')
       navigation.goBack()
     } catch (error) {
       console.log('Erreur validation:', error?.response?.data || error.message)
       Alert.alert(
         'Erreur',
-        error?.response?.data?.message || 'Impossible de valider la demande'
+        error?.response?.data?.message || 'Impossible de valider la demande.'
       )
     } finally {
       setSubmitting(false)
@@ -73,19 +117,46 @@ export default function RequestDetailsScreen({ route, navigation }) {
   }
 
   async function handleReject() {
+    if (!session?.userId) {
+      Alert.alert(
+        'Session manquante',
+        'Aucune session chef active. Reconnecte-toi avant de refuser.'
+      )
+      return
+    }
+
+    if (session?.structureId && request?.structure_id) {
+      if (Number(session.structureId) !== Number(request.structure_id)) {
+        Alert.alert(
+          'Structure invalide',
+          'Tu ne peux refuser que les demandes de ta structure.'
+        )
+        return
+      }
+    } else if (session?.structureName && request?.structure_name) {
+      if (session.structureName !== request.structure_name) {
+        Alert.alert(
+          'Structure invalide',
+          'Tu ne peux refuser que les demandes de ta structure.'
+        )
+        return
+      }
+    }
+
     try {
       setSubmitting(true)
+
       await api.patch(`/fuel-requests/${requestId}/reject`, {
-        chief_id: CHIEF_ID
+        chief_id: session.userId
       })
 
-      Alert.alert('Succès', 'Demande refusée')
+      Alert.alert('Succès', 'Demande refusée.')
       navigation.goBack()
     } catch (error) {
       console.log('Erreur refus:', error?.response?.data || error.message)
       Alert.alert(
         'Erreur',
-        error?.response?.data?.message || 'Impossible de refuser la demande'
+        error?.response?.data?.message || 'Impossible de refuser la demande.'
       )
     } finally {
       setSubmitting(false)
@@ -202,7 +273,7 @@ export default function RequestDetailsScreen({ route, navigation }) {
           <Text style={styles.formTitle}>Décision du chef</Text>
 
           <Text style={styles.formHint}>
-            Dans la version multi-structure complète, cette validation sera limitée à la structure du chef connecté.
+            La validation est maintenant liée au chef connecté et à sa structure.
           </Text>
 
           <Text style={styles.label}>Quantité autorisée</Text>
@@ -216,16 +287,26 @@ export default function RequestDetailsScreen({ route, navigation }) {
           />
 
           <TouchableOpacity
-            style={[styles.actionButton, styles.approveButton]}
+            style={[
+              styles.actionButton,
+              styles.approveButton,
+              submitting && styles.buttonDisabled
+            ]}
             onPress={handleApprove}
             disabled={submitting}
             activeOpacity={0.9}
           >
-            <Text style={styles.actionButtonText}>Valider la demande</Text>
+            <Text style={styles.actionButtonText}>
+              {submitting ? 'Validation...' : 'Valider la demande'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionButton, styles.rejectButton]}
+            style={[
+              styles.actionButton,
+              styles.rejectButton,
+              submitting && styles.buttonDisabled
+            ]}
             onPress={handleReject}
             disabled={submitting}
             activeOpacity={0.9}
@@ -352,6 +433,9 @@ const styles = StyleSheet.create({
   },
   rejectButton: {
     backgroundColor: '#DC2626'
+  },
+  buttonDisabled: {
+    opacity: 0.7
   },
   actionButtonText: {
     color: '#FFFFFF',

@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   RefreshControl,
   TextInput,
-  ScrollView
+  ScrollView,
+  Alert
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api } from '../api/client'
 
 const STATUSES = [
@@ -20,16 +22,60 @@ const STATUSES = [
   { key: 'rejected', label: 'Refusées' }
 ]
 
+const STORAGE_KEYS = {
+  role: 'fuel_app_role',
+  userId: 'fuel_app_user_id',
+  userName: 'fuel_app_user_name',
+  structureId: 'fuel_app_structure_id',
+  structureName: 'fuel_app_structure_name'
+}
+
 export default function ChiefDashboardScreen({ navigation }) {
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(false)
   const [activeStatus, setActiveStatus] = useState('all')
   const [driverFilter, setDriverFilter] = useState('')
   const [truckFilter, setTruckFilter] = useState('')
+  const [currentUser, setCurrentUser] = useState({
+    role: '',
+    userId: '',
+    userName: '',
+    structureId: '',
+    structureName: ''
+  })
 
   async function loadRequests() {
     try {
       setLoading(true)
+
+      const [
+        savedRole,
+        savedUserId,
+        savedUserName,
+        savedStructureId,
+        savedStructureName
+      ] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.role),
+        AsyncStorage.getItem(STORAGE_KEYS.userId),
+        AsyncStorage.getItem(STORAGE_KEYS.userName),
+        AsyncStorage.getItem(STORAGE_KEYS.structureId),
+        AsyncStorage.getItem(STORAGE_KEYS.structureName)
+      ])
+
+      const nextUser = {
+        role: savedRole || '',
+        userId: savedUserId || '',
+        userName: savedUserName || '',
+        structureId: savedStructureId || '',
+        structureName: savedStructureName || ''
+      }
+
+      setCurrentUser(nextUser)
+
+      if (!nextUser.structureId && !nextUser.structureName) {
+        setRequests([])
+        return
+      }
 
       const params = new URLSearchParams()
 
@@ -37,11 +83,17 @@ export default function ChiefDashboardScreen({ navigation }) {
       if (driverFilter.trim()) params.append('driver_name', driverFilter.trim())
       if (truckFilter.trim()) params.append('truck_number', truckFilter.trim())
 
+      if (nextUser.structureId) {
+        params.append('structure_id', nextUser.structureId)
+      } else if (nextUser.structureName) {
+        params.append('structure_name', nextUser.structureName.trim())
+      }
+
       const queryString = params.toString()
       const url = queryString ? `/fuel-requests?${queryString}` : '/fuel-requests'
 
       const response = await api.get(url)
-      setRequests(response.data.data || [])
+      setRequests(response?.data?.data || [])
     } catch (error) {
       console.log('Erreur chargement chef:', error?.response?.data || error.message)
       setRequests([])
@@ -87,7 +139,16 @@ export default function ChiefDashboardScreen({ navigation }) {
     { label: 'Refusées', value: stats.rejected }
   ]
 
+  function handleMissingStructure() {
+    Alert.alert(
+      'Structure requise',
+      'Aucune structure n’est liée à ce compte chef. Crée ou rattache d’abord une structure avant de piloter les demandes.'
+    )
+  }
+
   function renderHeader() {
+    const hasStructure = !!(currentUser.structureId || currentUser.structureName)
+
     return (
       <>
         <View style={styles.heroCard}>
@@ -104,19 +165,32 @@ export default function ChiefDashboardScreen({ navigation }) {
 
           <Text style={styles.heroTitle}>Pilotage carburant</Text>
           <Text style={styles.heroText}>
-            Supervise les demandes, applique des filtres et suis les opérations en cours.
+            Supervise uniquement les demandes liées à ta structure, applique des filtres
+            et suis les opérations en cours.
           </Text>
         </View>
 
         <View style={styles.structureCard}>
           <View style={styles.structureHeader}>
-            <Text style={styles.structureTitle}>Structure</Text>
-            <Text style={styles.structureBadge}>À venir</Text>
+            <Text style={styles.structureTitle}>Structure active</Text>
+            <Text
+              style={[
+                styles.structureBadge,
+                hasStructure ? styles.structureBadgeReady : styles.structureBadgeWarning
+              ]}
+            >
+              {hasStructure ? 'Liée' : 'Manquante'}
+            </Text>
           </View>
 
+          <Text style={styles.structureName}>
+            {currentUser.structureName || 'Aucune structure enregistrée'}
+          </Text>
+
           <Text style={styles.structureText}>
-            La prochaine évolution rattachera automatiquement chaque demande à une structure
-            pour isoler les données par entreprise.
+            {hasStructure
+              ? 'Toutes les demandes affichées ici sont filtrées par structure.'
+              : 'Lie d’abord ce chef à une structure pour isoler les données par entreprise.'}
           </Text>
         </View>
 
@@ -133,7 +207,9 @@ export default function ChiefDashboardScreen({ navigation }) {
 
           <TouchableOpacity
             style={[styles.quickActionButton, styles.quickActionButtonSecondary]}
-            onPress={() => navigation.navigate('TeamManagement')}
+            onPress={() =>
+              hasStructure ? navigation.navigate('TeamManagement') : handleMissingStructure()
+            }
             activeOpacity={0.9}
           >
             <Text
@@ -215,12 +291,14 @@ export default function ChiefDashboardScreen({ navigation }) {
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Demandes</Text>
           <Text style={styles.sectionSubtitle}>
-            Historique et opérations en cours
+            Historique et opérations en cours de la structure
           </Text>
         </View>
       </>
     )
   }
+
+  const hasStructure = !!(currentUser.structureId || currentUser.structureName)
 
   return (
     <View style={styles.container}>
@@ -241,6 +319,9 @@ export default function ChiefDashboardScreen({ navigation }) {
                   <Text style={styles.truck}>{item.truck_number}</Text>
                   <Text style={styles.meta}>
                     Chauffeur : {item.driver_name || item.driver?.name || 'N/A'}
+                  </Text>
+                  <Text style={styles.structureMeta}>
+                    Structure : {item.structure_name || currentUser.structureName || '—'}
                   </Text>
                 </View>
 
@@ -293,10 +374,14 @@ export default function ChiefDashboardScreen({ navigation }) {
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyIcon}>📂</Text>
-            <Text style={styles.emptyTitle}>Aucune demande trouvée</Text>
+            <Text style={styles.emptyIcon}>{hasStructure ? '📂' : '🏢'}</Text>
+            <Text style={styles.emptyTitle}>
+              {hasStructure ? 'Aucune demande trouvée' : 'Structure manquante'}
+            </Text>
             <Text style={styles.emptyText}>
-              Essaie un autre filtre ou recharge la liste.
+              {hasStructure
+                ? 'Essaie un autre filtre ou recharge la liste.'
+                : 'Crée ou rattache une structure pour voir les demandes liées à ton entreprise.'}
             </Text>
           </View>
         }
@@ -304,7 +389,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           <RefreshControl refreshing={loading} onRefresh={loadRequests} />
         }
         contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={true}
+        showsVerticalScrollIndicator
       />
     </View>
   )
@@ -396,13 +481,26 @@ const styles = StyleSheet.create({
     color: '#0F172A'
   },
   structureBadge: {
-    backgroundColor: '#E2E8F0',
-    color: '#334155',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
     fontSize: 12,
-    fontWeight: '800'
+    fontWeight: '800',
+    overflow: 'hidden'
+  },
+  structureBadgeReady: {
+    backgroundColor: '#DCFCE7',
+    color: '#166534'
+  },
+  structureBadgeWarning: {
+    backgroundColor: '#FEE2E2',
+    color: '#991B1B'
+  },
+  structureName: {
+    color: '#0F172A',
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 8
   },
   structureText: {
     color: '#64748B',
@@ -593,6 +691,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
     color: '#64748B',
     fontSize: 15
+  },
+  structureMeta: {
+    marginTop: 4,
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700'
   },
   statusBadge: {
     borderRadius: 999,

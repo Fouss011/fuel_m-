@@ -1,11 +1,11 @@
-import express from 'express'
+import { Router } from 'express'
 import {
   createStructure,
   getStructureById,
   getAllStructures
 } from '../controllers/structureController.js'
 
-const router = express.Router()
+const router = Router()
 
 router.get('/', getAllStructures)
 router.get('/:id', getStructureById)

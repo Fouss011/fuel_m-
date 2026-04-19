@@ -1,4 +1,4 @@
-import express from 'express'
+import { Router } from 'express'
 import {
   createFuelRequest,
   getAllFuelRequests,
@@ -8,7 +8,7 @@ import {
   serveFuelRequest
 } from '../controllers/fuelRequestController.js'
 
-const router = express.Router()
+const router = Router()
 
 router.get('/', getAllFuelRequests)
 router.get('/:id', getFuelRequestById)

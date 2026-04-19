@@ -1,44 +1,159 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert
+  Alert,
+  ScrollView,
+  ActivityIndicator
 } from 'react-native'
-
-const PINS = {
-  chief: '1234',
-  pump: '5678'
-}
+import { api, saveSession } from '../api/client'
 
 export default function PinAccessScreen({ route, navigation }) {
   const { role } = route.params
+
   const [pin, setPin] = useState('')
+  const [structures, setStructures] = useState([])
+  const [selectedStructureId, setSelectedStructureId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
   const isChief = role === 'chief'
   const title = isChief ? 'Accès chef' : 'Accès pompiste'
   const subtitle = isChief
-    ? 'Entre le code sécurisé pour accéder à l’espace de pilotage.'
-    : 'Entre le code sécurisé pour accéder à l’espace de confirmation.'
-  const expectedPin = isChief ? PINS.chief : PINS.pump
+    ? 'Entre le code PIN de la structure pour accéder à l’espace de pilotage.'
+    : 'Entre le code PIN de la structure pour accéder à l’espace de confirmation.'
   const targetScreen = isChief ? 'ChiefDashboard' : 'PumpAttendantDashboard'
   const badgeLabel = isChief ? 'CHEF' : 'POMPISTE'
   const badgeStyle = isChief ? styles.badgeChief : styles.badgePump
   const badgeTextStyle = isChief ? styles.badgeChiefText : styles.badgePumpText
 
-  function handleValidate() {
-    if (pin.trim() !== expectedPin) {
-      Alert.alert('Code incorrect', 'Le code PIN est incorrect')
+  const selectedStructure = useMemo(() => {
+    return structures.find((item) => String(item.id) === String(selectedStructureId)) || null
+  }, [structures, selectedStructureId])
+
+  useEffect(() => {
+    initialize()
+  }, [])
+
+  async function initialize() {
+    try {
+      setLoading(true)
+
+      const structuresResponse = await api.get('/structures')
+      const allStructures = structuresResponse?.data?.data || []
+
+      setStructures(allStructures)
+
+      if (allStructures.length > 0) {
+        setSelectedStructureId(allStructures[0].id)
+      }
+    } catch (error) {
+      console.log('Erreur init accès pin:', error?.response?.data || error.message)
+      Alert.alert('Erreur', 'Impossible de charger les structures.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleSelectStructure(structure) {
+    setSelectedStructureId(structure.id)
+  }
+
+  async function handleValidate() {
+    const cleanPin = pin.trim()
+
+    if (!selectedStructure) {
+      Alert.alert(
+        'Structure requise',
+        'Sélectionne d’abord une structure avant de continuer.'
+      )
       return
     }
 
-    navigation.replace(targetScreen)
+    if (!cleanPin) {
+      Alert.alert('Code PIN requis', 'Entre le code PIN pour continuer.')
+      return
+    }
+
+    const expectedPin = isChief
+      ? selectedStructure.pin_chief
+      : selectedStructure.pin_pump
+
+    if (!expectedPin) {
+      Alert.alert(
+        'PIN manquant',
+        isChief
+          ? 'Aucun code PIN chef n’est défini pour cette structure.'
+          : 'Aucun code PIN pompiste n’est défini pour cette structure.'
+      )
+      return
+    }
+
+    if (cleanPin !== String(expectedPin).trim()) {
+      Alert.alert('Code PIN incorrect', 'Code PIN pas correct, réessaie.')
+      return
+    }
+
+    try {
+      setSubmitting(true)
+
+      const usersResponse = await api.get(
+        `/users?structure_id=${selectedStructure.id}&role=${
+          isChief ? 'chief' : 'pump_attendant'
+        }`
+      )
+
+      const matchedUsers = usersResponse?.data?.data || []
+      const linkedUser = matchedUsers[0]
+
+      if (!linkedUser) {
+        Alert.alert(
+          'Utilisateur introuvable',
+          isChief
+            ? 'Aucun chef n’est encore rattaché à cette structure.'
+            : 'Aucun pompiste n’est encore rattaché à cette structure.'
+        )
+        return
+      }
+
+      await saveSession({
+        userId: linkedUser.id,
+        userName: linkedUser.name || null,
+        role: linkedUser.role,
+        structureId: selectedStructure.id,
+        structureName: selectedStructure.name
+      })
+
+      navigation.replace(targetScreen)
+    } catch (error) {
+      console.log('Erreur validation pin:', error?.response?.data || error.message)
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message ||
+          'Impossible d’ouvrir la session. Vérifie la structure et réessaie.'
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#081B33" />
+      </View>
+    )
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.topCard}>
         <View style={[styles.badgeBase, badgeStyle]}>
           <Text style={badgeTextStyle}>{badgeLabel}</Text>
@@ -49,6 +164,32 @@ export default function PinAccessScreen({ route, navigation }) {
       </View>
 
       <View style={styles.formCard}>
+        <Text style={styles.label}>Structure</Text>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+          style={styles.chipsScroll}
+        >
+          {structures.map((item) => {
+            const active = String(item.id) === String(selectedStructureId)
+
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => handleSelectStructure(item)}
+                activeOpacity={0.9}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+
         <Text style={styles.label}>Code PIN</Text>
 
         <TextInput
@@ -59,35 +200,47 @@ export default function PinAccessScreen({ route, navigation }) {
           placeholderTextColor="#94A3B8"
           keyboardType="numeric"
           secureTextEntry
-          maxLength={4}
+          maxLength={8}
         />
 
         <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>Accès protégé</Text>
           <Text style={styles.infoText}>
-            Cette zone est réservée au personnel autorisé. Dans la prochaine version,
-            l’accès sera également rattaché à une structure spécifique.
+            L’accès est lié à la structure sélectionnée. Le code PIN doit correspondre
+            au rôle et à la structure choisis.
           </Text>
         </View>
 
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, submitting && styles.buttonDisabled]}
           onPress={handleValidate}
           activeOpacity={0.9}
+          disabled={submitting}
         >
-          <Text style={styles.buttonText}>Accéder à l’espace</Text>
+          <Text style={styles.buttonText}>
+            {submitting ? 'Ouverture...' : 'Accéder à l’espace'}
+          </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F7FB'
+  },
   container: {
     flex: 1,
+    backgroundColor: '#F3F7FB'
+  },
+  content: {
     padding: 20,
     justifyContent: 'center',
-    backgroundColor: '#F3F7FB'
+    flexGrow: 1
   },
   topCard: {
     backgroundColor: '#FFFFFF',
@@ -144,6 +297,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A'
   },
+  chipsScroll: {
+    marginBottom: 14
+  },
+  chipsRow: {
+    paddingRight: 8
+  },
+  chip: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    marginRight: 8
+  },
+  chipActive: {
+    backgroundColor: '#081B33'
+  },
+  chipText: {
+    color: '#0F172A',
+    fontWeight: '800',
+    fontSize: 13
+  },
+  chipTextActive: {
+    color: '#FFFFFF'
+  },
   input: {
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
@@ -178,6 +355,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center'
+  },
+  buttonDisabled: {
+    opacity: 0.7
   },
   buttonText: {
     color: '#FFFFFF',

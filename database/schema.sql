@@ -1,42 +1,63 @@
--- Nettoyage
+-- =====================================
+-- RESET TOTAL
+-- =====================================
 drop table if exists fuel_requests cascade;
 drop table if exists users cascade;
 drop table if exists structures cascade;
 
--- =========================
--- Table structures
--- =========================
+-- =====================================
+-- TABLE STRUCTURES
+-- =====================================
 create table structures (
   id bigserial primary key,
   name text not null unique,
-  owner_name text,
-  owner_phone text,
-  pin_chief text,
-  pin_pump text,
-  created_at timestamptz not null default now()
+  owner_name text not null,
+  owner_phone text not null unique,
+  pin_chief text not null,
+  pin_pump text not null,
+  created_at timestamptz not null default now(),
+
+  constraint structures_name_not_blank check (length(trim(name)) > 0),
+  constraint structures_owner_name_not_blank check (length(trim(owner_name)) > 0),
+  constraint structures_owner_phone_not_blank check (length(trim(owner_phone)) > 0),
+  constraint structures_pin_chief_format check (pin_chief ~ '^[0-9]{4,8}$'),
+  constraint structures_pin_pump_format check (pin_pump ~ '^[0-9]{4,8}$'),
+  constraint structures_pin_different check (pin_chief <> pin_pump)
 );
 
--- =========================
--- Table utilisateurs
--- =========================
+-- =====================================
+-- TABLE USERS
+-- =====================================
 create table users (
   id bigserial primary key,
-  structure_id bigint references structures(id) on delete set null,
+  structure_id bigint not null references structures(id) on delete cascade,
   name text not null,
-  phone text unique not null,
+  phone text not null unique,
   password_hash text,
   role text not null check (role in ('driver', 'chief', 'pump_attendant')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+
+  constraint users_name_not_blank check (length(trim(name)) > 0),
+  constraint users_phone_not_blank check (length(trim(phone)) > 0)
 );
 
--- =========================
--- Table demandes carburant
--- =========================
+-- un seul chef par structure
+create unique index uniq_one_chief_per_structure
+on users(structure_id)
+where role = 'chief';
+
+create index idx_users_structure_id on users(structure_id);
+create index idx_users_role on users(role);
+create index idx_users_phone on users(phone);
+
+-- =====================================
+-- TABLE FUEL REQUESTS
+-- =====================================
 create table fuel_requests (
   id bigserial primary key,
 
-  structure_id bigint references structures(id) on delete set null,
-  structure_name text,
+  structure_id bigint not null references structures(id) on delete cascade,
+  structure_name text not null,
 
   driver_id bigint references users(id) on delete set null,
   chief_id bigint references users(id) on delete set null,
@@ -44,7 +65,7 @@ create table fuel_requests (
 
   driver_name text not null,
   truck_number text not null,
-  fuel_type text not null,
+  fuel_type text not null check (fuel_type in ('gasoil', 'essence')),
 
   requested_liters numeric(10,2) not null check (requested_liters > 0),
   approved_liters numeric(10,2),
@@ -56,108 +77,65 @@ create table fuel_requests (
 
   created_at timestamptz not null default now(),
   approved_at timestamptz,
-  served_at timestamptz
-);
+  served_at timestamptz,
 
--- =========================
--- Index
--- =========================
-create index idx_users_structure_id on users(structure_id);
+  constraint fuel_requests_structure_name_not_blank check (length(trim(structure_name)) > 0),
+  constraint fuel_requests_driver_name_not_blank check (length(trim(driver_name)) > 0),
+  constraint fuel_requests_truck_number_not_blank check (length(trim(truck_number)) > 0),
+
+  constraint fuel_requests_approved_liters_positive
+    check (approved_liters is null or approved_liters > 0),
+
+  constraint fuel_requests_served_liters_positive
+    check (served_liters is null or served_liters > 0),
+
+  constraint fuel_requests_amount_valid
+    check (amount is null or amount >= 0),
+
+  constraint fuel_requests_approved_not_above_requested
+    check (
+      approved_liters is null
+      or approved_liters <= requested_liters
+    ),
+
+  constraint fuel_requests_served_not_above_requested
+    check (
+      served_liters is null
+      or served_liters <= requested_liters
+    ),
+
+  constraint fuel_requests_served_not_above_approved
+    check (
+      approved_liters is null
+      or served_liters is null
+      or served_liters <= approved_liters
+    ),
+
+  constraint fuel_requests_approved_when_needed
+    check (
+      status in ('pending', 'rejected')
+      or approved_liters is not null
+    ),
+
+  constraint fuel_requests_served_requires_amount
+    check (
+      status <> 'served'
+      or (served_liters is not null and amount is not null and pump_attendant_id is not null)
+    ),
+
+  constraint fuel_requests_approved_requires_chief
+    check (
+      status not in ('approved', 'served', 'rejected')
+      or chief_id is not null
+    )
+);
 
 create index idx_fuel_requests_status on fuel_requests(status);
 create index idx_fuel_requests_driver_id on fuel_requests(driver_id);
+create index idx_fuel_requests_chief_id on fuel_requests(chief_id);
+create index idx_fuel_requests_pump_attendant_id on fuel_requests(pump_attendant_id);
 create index idx_fuel_requests_structure_id on fuel_requests(structure_id);
 create index idx_fuel_requests_structure_name on fuel_requests(structure_name);
 create index idx_fuel_requests_driver_name on fuel_requests(driver_name);
+create index idx_fuel_requests_truck_number on fuel_requests(truck_number);
 create index idx_fuel_requests_created_at on fuel_requests(created_at desc);
-
--- =========================
--- Données de test
--- =========================
-insert into structures (name, owner_name, owner_phone, pin_chief, pin_pump)
-values
-  ('Transport Kossi SARL', 'Chef Principal', '90000002', '1234', '5678'),
-  ('Flotte Kara BTP', 'Chef Kara', '90000012', '1234', '5678');
-
-insert into users (structure_id, name, phone, password_hash, role)
-values
-  (1, 'Kossi Chauffeur', '90000001', 'demo', 'driver'),
-  (1, 'Chef Principal', '90000002', 'demo', 'chief'),
-  (1, 'Pompiste Station 1', '90000003', 'demo', 'pump_attendant'),
-  (2, 'Yaw Chauffeur', '90000011', 'demo', 'driver'),
-  (2, 'Chef Kara', '90000012', 'demo', 'chief'),
-  (2, 'Pompiste Kara', '90000013', 'demo', 'pump_attendant');
-
-insert into fuel_requests (
-  structure_id,
-  structure_name,
-  driver_id,
-  chief_id,
-  pump_attendant_id,
-  driver_name,
-  truck_number,
-  fuel_type,
-  requested_liters,
-  approved_liters,
-  served_liters,
-  amount,
-  status,
-  created_at,
-  approved_at,
-  served_at
-)
-values
-  (
-    1,
-    'Transport Kossi SARL',
-    1,
-    2,
-    null,
-    'Kossi Chauffeur',
-    'TG-1234-AB',
-    'gasoil',
-    120,
-    100,
-    null,
-    null,
-    'approved',
-    now() - interval '2 day',
-    now() - interval '1 day',
-    null
-  ),
-  (
-    1,
-    'Transport Kossi SARL',
-    1,
-    null,
-    null,
-    'Kossi Chauffeur',
-    'TG-5678-CD',
-    'essence',
-    80,
-    null,
-    null,
-    null,
-    'pending',
-    now() - interval '3 hour',
-    null,
-    null
-  ),
-  (
-    2,
-    'Flotte Kara BTP',
-    4,
-    5,
-    6,
-    'Yaw Chauffeur',
-    'TG-4321-KR',
-    'gasoil',
-    200,
-    180,
-    180,
-    126000,
-    'served',
-    now() - interval '3 day',
-    now() - interval '2 day',
-    now() - interval '2 day'
-  );

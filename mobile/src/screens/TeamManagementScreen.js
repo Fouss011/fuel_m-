@@ -7,29 +7,24 @@ import {
   TouchableOpacity,
   FlatList,
   Alert,
-  ScrollView
+  ActivityIndicator
 } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { api } from '../api/client'
-
-const DRIVER_STRUCTURE_NAME_KEY = 'fuel_app_structure_name'
+import { api, getStoredSession } from '../api/client'
 
 const ROLE_OPTIONS = [
   { label: 'Chauffeur', value: 'driver' },
-  { label: 'Chef', value: 'chief' },
   { label: 'Pompiste', value: 'pump_attendant' }
 ]
 
 export default function TeamManagementScreen() {
+  const [session, setSession] = useState(null)
   const [structureName, setStructureName] = useState('')
-  const [structures, setStructures] = useState([])
-  const [selectedStructureId, setSelectedStructureId] = useState(null)
-
   const [users, setUsers] = useState([])
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [role, setRole] = useState('driver')
   const [loading, setLoading] = useState(false)
+  const [screenLoading, setScreenLoading] = useState(true)
 
   useEffect(() => {
     initialize()
@@ -37,37 +32,29 @@ export default function TeamManagementScreen() {
 
   async function initialize() {
     try {
-      const storedStructureName = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
-      if (storedStructureName) {
-        setStructureName(storedStructureName)
-      }
+      setScreenLoading(true)
 
-      const structuresResponse = await api.get('/structures')
-      const allStructures = structuresResponse?.data?.data || []
-      setStructures(allStructures)
+      const storedSession = await getStoredSession()
 
-      let currentStructure = null
-
-      if (storedStructureName) {
-        currentStructure = allStructures.find(
-          (item) => item.name?.toLowerCase() === storedStructureName.toLowerCase()
-        )
-      }
-
-      if (!currentStructure && allStructures.length > 0) {
-        currentStructure = allStructures[0]
-      }
-
-      if (currentStructure) {
-        setSelectedStructureId(currentStructure.id)
-        setStructureName(currentStructure.name)
-        await loadUsers(currentStructure.id)
-      } else {
+      if (!storedSession?.structureId) {
         setUsers([])
+        setSession(null)
+        Alert.alert(
+          'Structure requise',
+          'Crée ou sélectionne une structure avant de gérer ton équipe.'
+        )
+        return
       }
+
+      setSession(storedSession)
+      setStructureName(storedSession.structureName || '')
+
+      await loadUsers(storedSession.structureId)
     } catch (error) {
       console.log('Erreur init équipe:', error?.response?.data || error.message)
       setUsers([])
+    } finally {
+      setScreenLoading(false)
     }
   }
 
@@ -86,25 +73,27 @@ export default function TeamManagementScreen() {
     }
   }
 
-  async function handleSelectStructure(structure) {
-    try {
-      setSelectedStructureId(structure.id)
-      setStructureName(structure.name)
-      await AsyncStorage.setItem(DRIVER_STRUCTURE_NAME_KEY, structure.name)
-      await loadUsers(structure.id)
-    } catch (error) {
-      console.log('Erreur sélection structure:', error.message)
-    }
-  }
-
   async function handleAddUser() {
-    if (!selectedStructureId) {
-      Alert.alert('Erreur', 'Aucune structure sélectionnée')
+    if (!session?.structureId) {
+      Alert.alert('Structure requise', 'Aucune structure active détectée.')
       return
     }
 
-    if (!name.trim() || !phone.trim()) {
-      Alert.alert('Erreur', 'Le nom et le téléphone sont obligatoires')
+    const cleanName = name.trim()
+    const cleanPhone = phone.trim()
+
+    if (!cleanName) {
+      Alert.alert('Nom requis', 'Le nom du membre est obligatoire.')
+      return
+    }
+
+    if (!cleanPhone) {
+      Alert.alert('Téléphone requis', 'Le téléphone du membre est obligatoire.')
+      return
+    }
+
+    if (!role) {
+      Alert.alert('Rôle requis', 'Choisis un rôle avant d’ajouter le membre.')
       return
     }
 
@@ -112,9 +101,9 @@ export default function TeamManagementScreen() {
       setLoading(true)
 
       await api.post('/users', {
-        structure_id: selectedStructureId,
-        name: name.trim(),
-        phone: phone.trim(),
+        structure_id: session.structureId,
+        name: cleanName,
+        phone: cleanPhone,
         role
       })
 
@@ -122,13 +111,15 @@ export default function TeamManagementScreen() {
       setPhone('')
       setRole('driver')
 
-      await loadUsers(selectedStructureId)
-      Alert.alert('Succès', 'Membre ajouté à l’équipe')
+      await loadUsers(session.structureId)
+
+      Alert.alert('Succès', 'Membre ajouté à l’équipe.')
     } catch (error) {
       console.log('Erreur création utilisateur:', error?.response?.data || error.message)
+
       Alert.alert(
         'Erreur',
-        error?.response?.data?.message || 'Impossible d’ajouter ce membre'
+        error?.response?.data?.message || 'Impossible d’ajouter ce membre.'
       )
     } finally {
       setLoading(false)
@@ -148,6 +139,14 @@ export default function TeamManagementScreen() {
     }
   }
 
+  if (screenLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#081B33" />
+      </View>
+    )
+  }
+
   return (
     <FlatList
       style={styles.container}
@@ -159,7 +158,7 @@ export default function TeamManagementScreen() {
           <View style={styles.heroCard}>
             <Text style={styles.heroTitle}>Gestion équipe</Text>
             <Text style={styles.heroText}>
-              Ajoute et visualise les membres d’une structure.
+              Ajoute et visualise les membres de ta structure active.
             </Text>
 
             <View style={styles.structureBox}>
@@ -169,35 +168,6 @@ export default function TeamManagementScreen() {
               </Text>
             </View>
           </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.structureChips}
-            style={styles.structureScroll}
-          >
-            {structures.map((item) => {
-              const active = selectedStructureId === item.id
-
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.structureChip, active && styles.structureChipActive]}
-                  onPress={() => handleSelectStructure(item)}
-                  activeOpacity={0.9}
-                >
-                  <Text
-                    style={[
-                      styles.structureChipText,
-                      active && styles.structureChipTextActive
-                    ]}
-                  >
-                    {item.name}
-                  </Text>
-                </TouchableOpacity>
-              )
-            })}
-          </ScrollView>
 
           <View style={styles.formCard}>
             <Text style={styles.formTitle}>Ajouter un membre</Text>
@@ -241,6 +211,14 @@ export default function TeamManagementScreen() {
               })}
             </View>
 
+            <View style={styles.infoBox}>
+              <Text style={styles.infoTitle}>Ajout par structure</Text>
+              <Text style={styles.infoText}>
+                Chaque membre ajouté ici sera automatiquement rattaché à la structure active.
+                Le chef principal n’est pas créé ici : il est créé dès la création de la structure.
+              </Text>
+            </View>
+
             <TouchableOpacity
               style={styles.button}
               onPress={handleAddUser}
@@ -267,7 +245,7 @@ export default function TeamManagementScreen() {
         return (
           <View style={styles.userCard}>
             <View style={styles.userHeader}>
-              <View>
+              <View style={styles.userInfos}>
                 <Text style={styles.userName}>{item.name}</Text>
                 <Text style={styles.userPhone}>{item.phone}</Text>
               </View>
@@ -295,6 +273,12 @@ export default function TeamManagementScreen() {
 }
 
 const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F7FB'
+  },
   container: {
     flex: 1,
     backgroundColor: '#F3F7FB'
@@ -339,30 +323,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800'
   },
-  structureScroll: {
-    marginBottom: 14
-  },
-  structureChips: {
-    paddingRight: 8
-  },
-  structureChip: {
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    marginRight: 8
-  },
-  structureChipActive: {
-    backgroundColor: '#081B33'
-  },
-  structureChipText: {
-    color: '#0F172A',
-    fontWeight: '800',
-    fontSize: 13
-  },
-  structureChipTextActive: {
-    color: '#FFFFFF'
-  },
   formCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
@@ -395,7 +355,7 @@ const styles = StyleSheet.create({
   roleRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 18
+    marginBottom: 16
   },
   roleOption: {
     flex: 1,
@@ -417,6 +377,25 @@ const styles = StyleSheet.create({
   },
   roleTextActive: {
     color: '#FFFFFF'
+  },
+  infoBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  infoTitle: {
+    color: '#0F172A',
+    fontWeight: '800',
+    fontSize: 15,
+    marginBottom: 6
+  },
+  infoText: {
+    color: '#64748B',
+    lineHeight: 20,
+    fontSize: 13
   },
   button: {
     backgroundColor: '#081B33',
@@ -454,6 +433,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start'
+  },
+  userInfos: {
+    flex: 1,
+    paddingRight: 10
   },
   userName: {
     fontSize: 17,

@@ -9,83 +9,135 @@ import {
   ActivityIndicator,
   ScrollView
 } from 'react-native'
-import { api } from '../api/client'
-
-const PUMP_ATTENDANT_ID = 3
+import { api, getStoredSession } from '../api/client'
 
 export default function ConfirmFuelScreen({ route, navigation }) {
   const { requestId } = route.params
+
   const [request, setRequest] = useState(null)
+  const [session, setSession] = useState(null)
   const [servedLiters, setServedLiters] = useState('')
   const [amount, setAmount] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
+  useEffect(() => {
+    loadRequest()
+  }, [requestId])
+
   async function loadRequest() {
     try {
       setLoading(true)
+
+      const storedSession = await getStoredSession()
+      setSession(storedSession)
+
       const response = await api.get(`/fuel-requests/${requestId}`)
-      const data = response.data.data
+      const data = response?.data?.data
+
       setRequest(data)
-      setServedLiters(String(data.approved_liters || data.requested_liters || ''))
+      setServedLiters(String(data?.approved_liters || data?.requested_liters || ''))
     } catch (error) {
       console.log('Erreur chargement confirmation:', error?.response?.data || error.message)
-      Alert.alert('Erreur', 'Impossible de charger la demande')
+
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message || 'Impossible de charger la demande.'
+      )
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    loadRequest()
-  }, [requestId])
-
   async function handleConfirm() {
-    if (!servedLiters || !amount) {
-      Alert.alert('Erreur', 'Tous les champs sont obligatoires')
+    if (!session?.userId) {
+      Alert.alert(
+        'Session manquante',
+        'Aucune session pompiste active. Reconnecte-toi avant de confirmer.'
+      )
       return
     }
 
-    const maxAllowed = Number(
-      request.approved_liters || request.requested_liters || 0
-    )
+    if (!servedLiters?.trim()) {
+      Alert.alert(
+        'Champ obligatoire',
+        'Indique les litres réellement servis avant de valider.'
+      )
+      return
+    }
 
+    if (!amount?.trim()) {
+      Alert.alert(
+        'Champ obligatoire',
+        'Important : tu dois mettre la somme avant de valider.'
+      )
+      return
+    }
+
+    const maxAllowed = Number(request?.approved_liters || request?.requested_liters || 0)
     const servedValue = Number(servedLiters)
     const amountValue = Number(amount)
 
     if (Number.isNaN(servedValue) || servedValue <= 0) {
-      Alert.alert('Erreur', 'Entre une quantité servie valide')
+      Alert.alert(
+        'Valeur invalide',
+        'Entre une quantité servie valide, supérieure à 0.'
+      )
       return
     }
 
     if (Number.isNaN(amountValue) || amountValue < 0) {
-      Alert.alert('Erreur', 'Entre un montant valide')
+      Alert.alert(
+        'Montant invalide',
+        'Le montant est obligatoire et doit être un nombre valide.'
+      )
       return
     }
 
     if (servedValue > maxAllowed) {
       Alert.alert(
-        'Erreur',
-        `La quantité servie ne peut pas dépasser ${maxAllowed} L`
+        'Quantité trop élevée',
+        `La quantité servie ne peut pas dépasser ${maxAllowed} L.`
       )
       return
     }
 
+    if (session?.structureId && request?.structure_id) {
+      if (Number(session.structureId) !== Number(request.structure_id)) {
+        Alert.alert(
+          'Structure invalide',
+          'Tu ne peux confirmer que les demandes de ta structure.'
+        )
+        return
+      }
+    } else if (session?.structureName && request?.structure_name) {
+      if (session.structureName !== request.structure_name) {
+        Alert.alert(
+          'Structure invalide',
+          'Tu ne peux confirmer que les demandes de ta structure.'
+        )
+        return
+      }
+    }
+
     try {
       setSubmitting(true)
+
       await api.patch(`/fuel-requests/${requestId}/serve`, {
-        pump_attendant_id: PUMP_ATTENDANT_ID,
+        pump_attendant_id: session.userId,
         served_liters: servedValue,
         amount: amountValue
       })
 
-      Alert.alert('Succès', 'Carburant confirmé')
+      Alert.alert('Succès', 'Livraison confirmée avec succès.')
       navigation.goBack()
     } catch (error) {
       console.log('Erreur confirmation service:', error?.response?.data || error.message)
+
       Alert.alert(
         'Erreur',
-        error?.response?.data?.message || 'Impossible de confirmer la livraison'
+        error?.response?.data?.message ||
+          'Impossible de confirmer la livraison.'
       )
     } finally {
       setSubmitting(false)
@@ -103,7 +155,7 @@ export default function ConfirmFuelScreen({ route, navigation }) {
   if (!request) {
     return (
       <View style={styles.center}>
-        <Text>Demande introuvable</Text>
+        <Text style={styles.notFoundText}>Demande introuvable</Text>
       </View>
     )
   }
@@ -155,7 +207,7 @@ export default function ConfirmFuelScreen({ route, navigation }) {
         <Text style={styles.formTitle}>Saisie du service</Text>
 
         <Text style={styles.formHint}>
-          Dans la version complète, le pompiste ne verra et ne confirmera que les demandes validées de sa structure.
+          Tous les champs saisis ici sont impératifs avant validation finale.
         </Text>
 
         <Text style={styles.label}>Litres réellement servis</Text>
@@ -179,12 +231,14 @@ export default function ConfirmFuelScreen({ route, navigation }) {
         />
 
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, submitting && styles.buttonDisabled]}
           onPress={handleConfirm}
           disabled={submitting}
           activeOpacity={0.9}
         >
-          <Text style={styles.buttonText}>Confirmer la livraison</Text>
+          <Text style={styles.buttonText}>
+            {submitting ? 'Confirmation...' : 'Confirmer la livraison'}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -205,6 +259,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F3F7FB'
+  },
+  notFoundText: {
+    color: '#0F172A',
+    fontSize: 16,
+    fontWeight: '700'
   },
   heroCard: {
     backgroundColor: '#081B33',
@@ -299,6 +358,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 4
+  },
+  buttonDisabled: {
+    opacity: 0.7
   },
   buttonText: {
     color: '#FFFFFF',
