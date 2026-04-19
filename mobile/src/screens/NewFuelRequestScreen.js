@@ -1,5 +1,3 @@
-// mobile/src/screens/NewFuelRequestScreen.js
-
 import { useEffect, useState } from 'react'
 import {
   View,
@@ -8,10 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ScrollView
+  ScrollView,
+  ActivityIndicator
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { api } from '../api/client'
+import { api, getStoredSession } from '../api/client'
 
 const STORAGE_KEYS = {
   driverName: 'fuel_app_driver_name',
@@ -33,7 +32,8 @@ export default function NewFuelRequestScreen({ navigation }) {
   const [structureName, setStructureName] = useState('')
   const [fuelType, setFuelType] = useState('gasoil')
   const [liters, setLiters] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     loadSavedData()
@@ -41,6 +41,10 @@ export default function NewFuelRequestScreen({ navigation }) {
 
   async function loadSavedData() {
     try {
+      setLoading(true)
+
+      const storedSession = await getStoredSession()
+
       const [
         savedDriverName,
         savedDriverId,
@@ -53,17 +57,24 @@ export default function NewFuelRequestScreen({ navigation }) {
         AsyncStorage.getItem(STORAGE_KEYS.structureName)
       ])
 
-      if (savedDriverName) setDriverName(savedDriverName)
-      if (savedDriverId) setDriverId(savedDriverId)
-      if (savedStructureId) setStructureId(savedStructureId)
-      if (savedStructureName) setStructureName(savedStructureName)
+      const finalDriverName = storedSession?.userName || savedDriverName || ''
+      const finalDriverId = storedSession?.userId || savedDriverId || null
+      const finalStructureId = storedSession?.structureId || savedStructureId || null
+      const finalStructureName = storedSession?.structureName || savedStructureName || ''
+
+      if (finalDriverName) setDriverName(String(finalDriverName))
+      if (finalDriverId) setDriverId(finalDriverId)
+      if (finalStructureId) setStructureId(finalStructureId)
+      if (finalStructureName) setStructureName(String(finalStructureName))
     } catch (error) {
       console.log('Erreur chargement infos chauffeur :', error.message)
+    } finally {
+      setLoading(false)
     }
   }
 
   async function handleSubmit() {
-    if (loading) return
+    if (submitting) return
 
     const cleanDriver = driverName.trim()
     const cleanTruck = truckNumber.trim().toUpperCase()
@@ -85,7 +96,7 @@ export default function NewFuelRequestScreen({ navigation }) {
       return
     }
 
-    if (!liters) {
+    if (!liters.trim()) {
       Alert.alert('Champ manquant', 'Le nombre de litres demandé est obligatoire.')
       return
     }
@@ -98,19 +109,30 @@ export default function NewFuelRequestScreen({ navigation }) {
       return
     }
 
-    // structure désormais obligatoire dans tout le parcours
     if (!structureId && !cleanStructureName) {
       Alert.alert(
         'Structure obligatoire',
-        'Tu dois être rattaché à une structure avant de créer une demande.'
+        'La structure est obligatoire avant d’envoyer une demande.'
       )
       return
     }
 
     try {
-      setLoading(true)
+      setSubmitting(true)
 
       await AsyncStorage.setItem(STORAGE_KEYS.driverName, cleanDriver)
+
+      if (driverId) {
+        await AsyncStorage.setItem(STORAGE_KEYS.driverId, String(driverId))
+      }
+
+      if (structureId) {
+        await AsyncStorage.setItem(STORAGE_KEYS.structureId, String(structureId))
+      }
+
+      if (cleanStructureName) {
+        await AsyncStorage.setItem(STORAGE_KEYS.structureName, cleanStructureName)
+      }
 
       const payload = {
         driver_name: cleanDriver,
@@ -119,7 +141,6 @@ export default function NewFuelRequestScreen({ navigation }) {
         requested_liters: litersNumber
       }
 
-      // plus d’ID codé en dur : on récupère la vraie structure du chauffeur connecté
       if (driverId) {
         payload.driver_id = Number(driverId)
       }
@@ -134,20 +155,23 @@ export default function NewFuelRequestScreen({ navigation }) {
 
       const response = await api.post('/fuel-requests', payload)
 
+      console.log('Demande créée :', response?.data)
+
       Alert.alert(
         'Demande envoyée',
-        'La demande de carburant a été créée et liée à ta structure.',
+        'Votre demande est envoyée. Elle est maintenant en attente de confirmation du chef.',
         [
           {
             text: 'OK',
             onPress: () => {
+              setTruckNumber('')
+              setLiters('')
+              setFuelType('gasoil')
               navigation.goBack()
             }
           }
         ]
       )
-
-      console.log('Demande créée :', response.data)
     } catch (error) {
       console.log(
         'Erreur création demande :',
@@ -156,12 +180,20 @@ export default function NewFuelRequestScreen({ navigation }) {
 
       const backendMessage =
         error?.response?.data?.message ||
-        'Impossible de créer la demande. Vérifie les informations et réessaie.'
+        'Impossible de créer la demande. Vérifie les champs obligatoires et réessaie.'
 
       Alert.alert('Erreur', backendMessage)
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#081B33" />
+      </View>
+    )
   }
 
   return (
@@ -176,7 +208,7 @@ export default function NewFuelRequestScreen({ navigation }) {
         <Text style={styles.heroTitle}>Nouvelle demande carburant</Text>
 
         <Text style={styles.heroSubtitle}>
-          Toutes les demandes sont maintenant automatiquement liées à ta structure.
+          La structure est reprise automatiquement quand elle est déjà connue.
         </Text>
       </View>
 
@@ -193,14 +225,14 @@ export default function NewFuelRequestScreen({ navigation }) {
         <Text style={styles.label}>Structure</Text>
         <TextInput
           value={structureName}
-          editable={false}
-          style={[styles.input, styles.disabledInput]}
-          placeholder="Aucune structure"
+          onChangeText={setStructureName}
+          style={styles.input}
+          placeholder="Nom de la structure"
           placeholderTextColor="#94A3B8"
         />
 
         <Text style={styles.helper}>
-          La structure est obligatoire et provient du compte connecté.
+          Après une première saisie, la structure reste enregistrée pour les prochaines demandes.
         </Text>
 
         <Text style={styles.label}>Camion</Text>
@@ -253,13 +285,13 @@ export default function NewFuelRequestScreen({ navigation }) {
         />
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[styles.button, submitting && styles.buttonDisabled]}
           onPress={handleSubmit}
           activeOpacity={0.9}
-          disabled={loading}
+          disabled={submitting}
         >
           <Text style={styles.buttonText}>
-            {loading ? 'Envoi en cours...' : 'Envoyer la demande'}
+            {submitting ? 'Envoi en cours...' : 'Envoyer la demande'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -268,6 +300,12 @@ export default function NewFuelRequestScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F7FB'
+  },
   container: {
     flex: 1,
     backgroundColor: '#F3F7FB'
@@ -327,10 +365,6 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     color: '#0F172A',
     marginBottom: 12
-  },
-  disabledInput: {
-    backgroundColor: '#EEF2F7',
-    color: '#475569'
   },
   helper: {
     color: '#64748B',
