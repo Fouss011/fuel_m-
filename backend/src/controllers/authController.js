@@ -30,32 +30,26 @@ function mapRoleLabel(role) {
   }
 }
 
-function buildSession({
-  user,
-  structure,
-  extra = {}
-}) {
-  const now = Date.now()
-  const exp = now + Number(process.env.SESSION_TTL_HOURS || 12) * 60 * 60 * 1000
+function buildSession({ user, structure, extra = {} }) {
+  const ttlHours = Number(process.env.SESSION_TTL_HOURS || 12)
+  const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString()
 
-  const session = {
+  const sessionPayload = {
     userId: user.id,
     userName: user.name,
     role: user.role,
     structureId: structure.id,
     structureName: structure.name,
     structureCode: structure.structure_code,
-    iat: now,
-    exp,
     ...extra
   }
 
-  const token = createSessionToken(session)
+  const token = createSessionToken(sessionPayload)
 
   return {
     token,
-    expires_at: new Date(exp).toISOString(),
-    session
+    expires_at: expiresAt,
+    session: sessionPayload
   }
 }
 
