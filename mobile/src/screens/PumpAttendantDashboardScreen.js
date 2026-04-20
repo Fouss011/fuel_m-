@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  TextInput
+  TextInput,
+  Alert
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { api, getStoredSession, clearSession } from '../api/client'
@@ -62,42 +63,48 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
   const [driverFilter, setDriverFilter] = useState('')
   const [truckFilter, setTruckFilter] = useState('')
 
-  const visibleRequests = useMemo(() => {
-    return requests.filter((item) => {
-      const matchesStatus =
-        activeFilter === 'all' ? true : item.status === activeFilter
-
-      const matchesDriver = driverFilter.trim()
-        ? String(item.driver_name || item.driver?.name || '')
-            .toLowerCase()
-            .includes(driverFilter.trim().toLowerCase())
-        : true
-
-      const matchesTruck = truckFilter.trim()
-        ? String(item.truck_number || '')
-            .toLowerCase()
-            .includes(truckFilter.trim().toLowerCase())
-        : true
-
-      return matchesStatus && matchesDriver && matchesTruck
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={handleLogoutPress} style={styles.headerLogoutButton} activeOpacity={0.85}>
+          <Text style={styles.headerLogoutText}>Déconnexion</Text>
+        </TouchableOpacity>
+      )
     })
-  }, [requests, activeFilter, driverFilter, truckFilter])
-
-  const approvedCount = useMemo(
-    () => requests.filter((item) => item.status === 'approved').length,
-    [requests]
-  )
-
-  const servedCount = useMemo(
-    () => requests.filter((item) => item.status === 'served').length,
-    [requests]
-  )
+  }, [navigation, session])
 
   useFocusEffect(
     useCallback(() => {
       loadRequests()
     }, [])
   )
+
+  async function handleLogout() {
+    await clearSession()
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }]
+    })
+  }
+
+  function handleLogoutPress() {
+    Alert.alert(
+      'Déconnexion',
+      'Veux-tu vraiment fermer la session pompiste sur cet appareil ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Se déconnecter',
+          style: 'destructive',
+          onPress: () => {
+            handleLogout().catch(() => {
+              Alert.alert('Erreur', 'Impossible de fermer la session pour le moment.')
+            })
+          }
+        }
+      ]
+    )
+  }
 
   async function loadRequests(isRefresh = false) {
     try {
@@ -112,7 +119,10 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
 
       if (!storedSession?.token || storedSession?.role !== 'pump_attendant') {
         await clearSession()
-        navigation.replace('PinAccess', { role: 'pump_attendant' })
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }]
+        })
         return
       }
 
@@ -152,16 +162,53 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
 
       if (error?.status === 401) {
         await clearSession()
-        navigation.replace('PinAccess', { role: 'pump_attendant' })
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }]
+        })
         return
       }
 
-      alert(error?.message || 'Impossible de charger les demandes.')
+      Alert.alert(
+        'Erreur',
+        error?.message || 'Impossible de charger les demandes.'
+      )
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
   }
+
+  const visibleRequests = useMemo(() => {
+    return requests.filter((item) => {
+      const matchesStatus =
+        activeFilter === 'all' ? true : item.status === activeFilter
+
+      const matchesDriver = driverFilter.trim()
+        ? String(item.driver_name || item.driver?.name || '')
+            .toLowerCase()
+            .includes(driverFilter.trim().toLowerCase())
+        : true
+
+      const matchesTruck = truckFilter.trim()
+        ? String(item.truck_number || '')
+            .toLowerCase()
+            .includes(truckFilter.trim().toLowerCase())
+        : true
+
+      return matchesStatus && matchesDriver && matchesTruck
+    })
+  }, [requests, activeFilter, driverFilter, truckFilter])
+
+  const approvedCount = useMemo(
+    () => requests.filter((item) => item.status === 'approved').length,
+    [requests]
+  )
+
+  const servedCount = useMemo(
+    () => requests.filter((item) => item.status === 'served').length,
+    [requests]
+  )
 
   function renderRequest({ item }) {
     const status = getStatusMeta(item.status)
@@ -262,7 +309,9 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
           <View>
             <View style={styles.heroCard}>
               <Text style={styles.badge}>POMPISTE</Text>
-              <Text style={styles.title}>Demandes à servir</Text>
+              <Text style={styles.title}>
+                {session?.structureName || 'Demandes à servir'}
+              </Text>
               <Text style={styles.subtitle}>
                 Retrouve les demandes validées, confirme la livraison et garde une vue claire sur ce qui a déjà été servi.
               </Text>
@@ -345,6 +394,15 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  headerLogoutButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 4
+  },
+  headerLogoutText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800'
+  },
   container: {
     flex: 1,
     backgroundColor: '#F3F7FB'

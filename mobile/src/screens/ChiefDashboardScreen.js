@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  TextInput
+  TextInput,
+  Alert
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import { api, getStoredSession, clearSession } from '../api/client'
@@ -64,11 +65,48 @@ export default function ChiefDashboardScreen({ navigation }) {
   const [truckFilter, setTruckFilter] = useState('')
   const [session, setSession] = useState(null)
 
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={handleLogoutPress} style={styles.headerLogoutButton} activeOpacity={0.85}>
+          <Text style={styles.headerLogoutText}>Déconnexion</Text>
+        </TouchableOpacity>
+      )
+    })
+  }, [navigation, session])
+
   useFocusEffect(
     useCallback(() => {
       loadRequests()
     }, [])
   )
+
+  async function handleLogout() {
+    await clearSession()
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }]
+    })
+  }
+
+  function handleLogoutPress() {
+    Alert.alert(
+      'Déconnexion',
+      'Veux-tu vraiment fermer la session chef sur cet appareil ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Se déconnecter',
+          style: 'destructive',
+          onPress: () => {
+            handleLogout().catch(() => {
+              Alert.alert('Erreur', 'Impossible de fermer la session pour le moment.')
+            })
+          }
+        }
+      ]
+    )
+  }
 
   async function loadRequests(isRefresh = false) {
     try {
@@ -83,7 +121,10 @@ export default function ChiefDashboardScreen({ navigation }) {
 
       if (!storedSession?.token || storedSession?.role !== 'chief') {
         await clearSession()
-        navigation.replace('PinAccess', { role: 'chief' })
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }]
+        })
         return
       }
 
@@ -110,13 +151,16 @@ export default function ChiefDashboardScreen({ navigation }) {
 
       if (error?.status === 401) {
         await clearSession()
-        navigation.replace('PinAccess', { role: 'chief' })
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }]
+        })
         return
       }
 
-      alert(
-        error?.message ||
-          'Impossible de charger les demandes de votre structure.'
+      Alert.alert(
+        'Erreur',
+        error?.message || 'Impossible de charger les demandes de votre structure.'
       )
     } finally {
       setLoading(false)
@@ -162,7 +206,8 @@ export default function ChiefDashboardScreen({ navigation }) {
       return
     }
 
-    alert(
+    Alert.alert(
+      'Information',
       item.status === 'approved'
         ? 'Cette demande a déjà été validée et attend la confirmation du pompiste.'
         : item.status === 'served'
@@ -365,6 +410,15 @@ export default function ChiefDashboardScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  headerLogoutButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 4
+  },
+  headerLogoutText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800'
+  },
   container: {
     flex: 1,
     backgroundColor: '#F3F7FB'
