@@ -1,174 +1,344 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  RefreshControl
+  RefreshControl,
+  ActivityIndicator,
+  TextInput
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { api } from '../api/client'
+import { api, getStoredSession, clearSession } from '../api/client'
 
-const DRIVER_STRUCTURE_NAME_KEY = 'fuel_app_structure_name'
+const STATUS_FILTERS = [
+  { key: 'approved', label: 'À servir' },
+  { key: 'served', label: 'Servies' },
+  { key: 'all', label: 'Toutes' }
+]
+
+function getStatusMeta(status) {
+  switch (status) {
+    case 'approved':
+      return {
+        label: 'Validée',
+        bg: '#DCFCE7',
+        color: '#166534'
+      }
+    case 'served':
+      return {
+        label: 'Servie',
+        bg: '#DBEAFE',
+        color: '#1D4ED8'
+      }
+    case 'pending':
+      return {
+        label: 'En attente',
+        bg: '#FFEDD5',
+        color: '#C2410C'
+      }
+    case 'rejected':
+      return {
+        label: 'Refusée',
+        bg: '#FEE2E2',
+        color: '#B91C1C'
+      }
+    default:
+      return {
+        label: status || 'Inconnu',
+        bg: '#E2E8F0',
+        color: '#475569'
+      }
+  }
+}
 
 export default function PumpAttendantDashboardScreen({ navigation }) {
   const [requests, setRequests] = useState([])
+  const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [structureName, setStructureName] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const [activeFilter, setActiveFilter] = useState('approved')
+  const [driverFilter, setDriverFilter] = useState('')
+  const [truckFilter, setTruckFilter] = useState('')
 
-  useEffect(() => {
-    loadStructureName()
-  }, [])
+  const visibleRequests = useMemo(() => {
+    return requests.filter((item) => {
+      const matchesStatus =
+        activeFilter === 'all' ? true : item.status === activeFilter
 
-  async function loadStructureName() {
-    try {
-      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
-      if (savedStructure) setStructureName(savedStructure)
-    } catch (error) {
-      console.log('Erreur lecture structure pompiste:', error.message)
-    }
-  }
+      const matchesDriver = driverFilter.trim()
+        ? String(item.driver_name || item.driver?.name || '')
+            .toLowerCase()
+            .includes(driverFilter.trim().toLowerCase())
+        : true
 
-  async function loadRequests() {
-    try {
-      setLoading(true)
+      const matchesTruck = truckFilter.trim()
+        ? String(item.truck_number || '')
+            .toLowerCase()
+            .includes(truckFilter.trim().toLowerCase())
+        : true
 
-      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
-      const currentStructure = savedStructure || structureName
+      return matchesStatus && matchesDriver && matchesTruck
+    })
+  }, [requests, activeFilter, driverFilter, truckFilter])
 
-      if (currentStructure) {
-        setStructureName(currentStructure)
-      }
+  const approvedCount = useMemo(
+    () => requests.filter((item) => item.status === 'approved').length,
+    [requests]
+  )
 
-      const params = new URLSearchParams()
-      params.append('status', 'approved')
-
-      if (currentStructure) {
-        params.append('structure_name', currentStructure)
-      }
-
-      const response = await api.get(`/fuel-requests?${params.toString()}`)
-      setRequests(response.data.data || [])
-    } catch (error) {
-      console.log('Erreur chargement pompiste:', error?.response?.data || error.message)
-      setRequests([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  const servedCount = useMemo(
+    () => requests.filter((item) => item.status === 'served').length,
+    [requests]
+  )
 
   useFocusEffect(
     useCallback(() => {
       loadRequests()
-    }, [structureName])
+    }, [])
   )
 
-  function renderHeader() {
-    return (
-      <>
-        <View style={styles.heroCard}>
-          <View style={styles.heroTop}>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>POMPISTE</Text>
-            </View>
+  async function loadRequests(isRefresh = false) {
+    try {
+      if (isRefresh) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
 
-            <View style={styles.heroMiniCard}>
-              <Text style={styles.heroMiniValue}>{requests.length}</Text>
-              <Text style={styles.heroMiniLabel}>À servir</Text>
-            </View>
+      const storedSession = await getStoredSession()
+      setSession(storedSession)
+
+      if (!storedSession?.token || storedSession?.role !== 'pump_attendant') {
+        await clearSession()
+        navigation.replace('PinAccess', { role: 'pump_attendant' })
+        return
+      }
+
+      const params = {}
+
+      if (storedSession.structureId) {
+        params.structure_id = storedSession.structureId
+      }
+
+      const response = await api.getFuelRequests(params)
+      const rawList = response?.data?.data || response?.data || []
+
+      const filteredByStructure = rawList.filter((item) => {
+        if (storedSession?.structureId && item?.structure_id) {
+          return Number(item.structure_id) === Number(storedSession.structureId)
+        }
+
+        if (storedSession?.structureName && item?.structure_name) {
+          return (
+            String(item.structure_name).trim() ===
+            String(storedSession.structureName).trim()
+          )
+        }
+
+        return true
+      })
+
+      filteredByStructure.sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime()
+        const dateB = new Date(b.created_at || 0).getTime()
+        return dateB - dateA
+      })
+
+      setRequests(filteredByStructure)
+    } catch (error) {
+      console.log('Erreur chargement demandes pompiste:', error?.data || error?.message || error)
+
+      if (error?.status === 401) {
+        await clearSession()
+        navigation.replace('PinAccess', { role: 'pump_attendant' })
+        return
+      }
+
+      alert(error?.message || 'Impossible de charger les demandes.')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  function renderRequest({ item }) {
+    const status = getStatusMeta(item.status)
+    const canConfirm = item.status === 'approved'
+
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.92}
+        onPress={() => {
+          if (canConfirm) {
+            navigation.navigate('ConfirmFuel', { requestId: item.id })
+          }
+        }}
+      >
+        <View style={styles.cardTop}>
+          <View>
+            <Text style={styles.truckNumber}>{item.truck_number}</Text>
+            <Text style={styles.driverName}>
+              {item.driver_name || item.driver?.name || 'Chauffeur non renseigné'}
+            </Text>
           </View>
 
-          <Text style={styles.heroTitle}>Demandes prêtes au service</Text>
-          <Text style={styles.heroText}>
-            Consulte les demandes validées et confirme la livraison.
-          </Text>
-
-          <View style={styles.structureBox}>
-            <Text style={styles.structureLabel}>Structure</Text>
-            <Text style={styles.structureValue}>
-              {structureName || 'Non renseignée pour le moment'}
+          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusText, { color: status.color }]}>
+              {status.label}
             </Text>
           </View>
         </View>
 
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Demandes à servir</Text>
-          <Text style={styles.sectionSubtitle}>
-            Historique des validations prêtes au service
-          </Text>
+        <View style={styles.infoGrid}>
+          <View style={styles.infoBox}>
+            <Text style={styles.infoLabel}>Carburant</Text>
+            <Text style={styles.infoValue}>{item.fuel_type || '—'}</Text>
+          </View>
+
+          <View style={styles.infoBox}>
+            <Text style={styles.infoLabel}>Validé</Text>
+            <Text style={styles.infoValue}>
+              {item.approved_liters || item.requested_liters || 0} L
+            </Text>
+          </View>
+
+          <View style={styles.infoBox}>
+            <Text style={styles.infoLabel}>Structure</Text>
+            <Text style={styles.infoValue}>{item.structure_name || '—'}</Text>
+          </View>
+
+          <View style={styles.infoBox}>
+            <Text style={styles.infoLabel}>Montant</Text>
+            <Text style={styles.infoValue}>
+              {item.amount ? `${item.amount} FCFA` : 'Non saisi'}
+            </Text>
+          </View>
         </View>
-      </>
+
+        {canConfirm ? (
+          <View style={styles.actionRow}>
+            <Text style={styles.actionText}>
+              Demande validée. Appuie pour confirmer la livraison.
+            </Text>
+            <Text style={styles.actionArrow}>›</Text>
+          </View>
+        ) : (
+          <View style={styles.actionRow}>
+            <Text style={styles.actionTextMuted}>
+              Cette demande est déjà traitée.
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    )
+  }
+
+  if (loading && !refreshing) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#081B33" />
+        <Text style={styles.loadingText}>Chargement de l’espace pompiste...</Text>
+      </View>
     )
   }
 
   return (
     <View style={styles.container}>
       <FlatList
-        data={requests}
+        data={visibleRequests}
         keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('ConfirmFuel', { requestId: item.id })}
-            activeOpacity={0.94}
-          >
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <Text style={styles.truck}>{item.truck_number}</Text>
-                <Text style={styles.meta}>
-                  Chauffeur : {item.driver_name || item.driver?.name || 'N/A'}
-                </Text>
-              </View>
-
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>À servir</Text>
-              </View>
-            </View>
-
-            <View style={styles.infoGrid}>
-              <View style={styles.infoBlock}>
-                <Text style={styles.infoLabel}>Carburant</Text>
-                <Text style={styles.infoValue}>{item.fuel_type}</Text>
-              </View>
-
-              <View style={styles.infoBlock}>
-                <Text style={styles.infoLabel}>Quantité validée</Text>
-                <Text style={styles.infoValue}>
-                  {item.approved_liters || item.requested_liters} L
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.structureMetaBox}>
-              <Text style={styles.structureMetaLabel}>Structure</Text>
-              <Text style={styles.structureMetaValue}>
-                {item.structure_name || '—'}
+        renderItem={renderRequest}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadRequests(true)}
+          />
+        }
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <View>
+            <View style={styles.heroCard}>
+              <Text style={styles.badge}>POMPISTE</Text>
+              <Text style={styles.title}>Demandes à servir</Text>
+              <Text style={styles.subtitle}>
+                Retrouve les demandes validées, confirme la livraison et garde une vue claire sur ce qui a déjà été servi.
               </Text>
             </View>
 
-            <View style={styles.footerRow}>
-              <Text style={styles.footerText}>Ouvrir pour confirmer la livraison</Text>
-              <Text style={styles.footerLink}>Confirmer ›</Text>
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiCard}>
+                <Text style={styles.kpiValue}>{approvedCount}</Text>
+                <Text style={styles.kpiLabel}>À servir</Text>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <Text style={styles.kpiValue}>{servedCount}</Text>
+                <Text style={styles.kpiLabel}>Servies</Text>
+              </View>
             </View>
-          </TouchableOpacity>
-        )}
-        ListHeaderComponent={renderHeader}
+
+            <View style={styles.filtersCard}>
+              <Text style={styles.sectionTitle}>Filtres</Text>
+
+              <View style={styles.filterTabs}>
+                {STATUS_FILTERS.map((filter) => {
+                  const active = activeFilter === filter.key
+
+                  return (
+                    <TouchableOpacity
+                      key={filter.key}
+                      style={[styles.filterTab, active && styles.filterTabActive]}
+                      onPress={() => setActiveFilter(filter.key)}
+                      activeOpacity={0.9}
+                    >
+                      <Text
+                        style={[
+                          styles.filterTabText,
+                          active && styles.filterTabTextActive
+                        ]}
+                      >
+                        {filter.label}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+
+              <TextInput
+                style={styles.input}
+                placeholder="Filtrer par chauffeur"
+                placeholderTextColor="#94A3B8"
+                value={driverFilter}
+                onChangeText={setDriverFilter}
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Filtrer par camion"
+                placeholderTextColor="#94A3B8"
+                value={truckFilter}
+                onChangeText={setTruckFilter}
+                autoCapitalize="characters"
+              />
+            </View>
+
+            <View style={styles.listHeader}>
+              <Text style={styles.sectionTitle}>Liste des demandes</Text>
+              <Text style={styles.listCount}>{visibleRequests.length} résultat(s)</Text>
+            </View>
+          </View>
+        }
         ListEmptyComponent={
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyIcon}>⛽</Text>
-            <Text style={styles.emptyTitle}>Aucune demande validée</Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Aucune demande à afficher</Text>
             <Text style={styles.emptyText}>
-              Les demandes prêtes à être servies apparaîtront ici.
+              Aucune demande ne correspond aux filtres en cours ou aucune demande n’a encore été validée pour cette structure.
             </Text>
           </View>
         }
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={loadRequests} />
-        }
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={true}
       />
     </View>
   )
@@ -179,214 +349,233 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F3F7FB'
   },
-  listContent: {
+  content: {
     padding: 16,
-    paddingBottom: 32,
-    flexGrow: 1
+    paddingBottom: 28
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F7FB',
+    paddingHorizontal: 24
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#475569',
+    fontSize: 15,
+    textAlign: 'center'
   },
   heroCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#081B33',
     borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
+    padding: 18,
+    marginBottom: 14
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    color: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    fontWeight: '900',
+    fontSize: 12,
+    marginBottom: 14
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '900',
+    marginBottom: 8
+  },
+  subtitle: {
+    color: '#CBD5E1',
+    fontSize: 14,
+    lineHeight: 21
+  },
+  kpiRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 14
+  },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0'
   },
-  heroTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12
-  },
-  roleBadge: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6
-  },
-  roleBadgeText: {
-    color: '#B45309',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.5
-  },
-  heroMiniCard: {
-    backgroundColor: '#FFF7ED',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignItems: 'center',
-    minWidth: 88
-  },
-  heroMiniValue: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#9A3412'
-  },
-  heroMiniLabel: {
-    color: '#B45309',
-    fontSize: 12,
-    marginTop: 2
-  },
-  heroTitle: {
-    fontSize: 28,
+  kpiValue: {
+    fontSize: 24,
     fontWeight: '900',
     color: '#0F172A',
     marginBottom: 6
   },
-  heroText: {
-    color: '#475569',
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 14
+  kpiLabel: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '700'
   },
-  structureBox: {
-    backgroundColor: '#FFF7ED',
-    borderRadius: 16,
-    padding: 14,
+  filtersCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#FED7AA'
-  },
-  structureLabel: {
-    color: '#9A3412',
-    fontSize: 12,
-    marginBottom: 4
-  },
-  structureValue: {
-    color: '#7C2D12',
-    fontSize: 15,
-    fontWeight: '800'
-  },
-  sectionRow: {
+    borderColor: '#E2E8F0',
     marginBottom: 14
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 12
+  },
+  filterTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14
+  },
+  filterTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0'
+  },
+  filterTabActive: {
+    backgroundColor: '#081B33'
+  },
+  filterTabText: {
+    color: '#334155',
+    fontWeight: '800',
+    fontSize: 13
+  },
+  filterTabTextActive: {
+    color: '#FFFFFF'
+  },
+  input: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    color: '#0F172A',
+    marginBottom: 12
+  },
+  listHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 12
+  },
+  listCount: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+    gap: 12
+  },
+  truckNumber: {
+    fontSize: 20,
     fontWeight: '900',
     color: '#0F172A',
     marginBottom: 4
   },
-  sectionSubtitle: {
+  driverName: {
     color: '#64748B',
-    fontSize: 14
-  },
-  emptyBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 28,
-    alignItems: 'center',
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  emptyIcon: {
-    fontSize: 30,
-    marginBottom: 10
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#0F172A',
-    marginBottom: 6
-  },
-  emptyText: {
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 20
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 18
-  },
-  cardHeaderLeft: {
-    flex: 1,
-    paddingRight: 12
-  },
-  truck: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#0F172A'
-  },
-  meta: {
-    marginTop: 6,
-    color: '#64748B',
-    fontSize: 15
+    fontSize: 14,
+    fontWeight: '700'
   },
   statusBadge: {
-    backgroundColor: '#FFF7ED',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8
   },
   statusText: {
-    fontSize: 12,
     fontWeight: '900',
-    color: '#C2410C'
+    fontSize: 12
   },
   infoGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between'
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 12
   },
-  infoBlock: {
-    width: '48.5%',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 18,
-    padding: 14
-  },
-  infoLabel: {
-    color: '#64748B',
-    fontSize: 12,
-    marginBottom: 5
-  },
-  infoValue: {
-    color: '#0F172A',
-    fontSize: 18,
-    fontWeight: '800'
-  },
-  structureMetaBox: {
-    marginTop: 12,
+  infoBox: {
+    width: '48%',
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
     padding: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0'
   },
-  structureMetaLabel: {
+  infoLabel: {
     color: '#64748B',
     fontSize: 12,
     marginBottom: 4
   },
-  structureMetaValue: {
+  infoValue: {
     color: '#0F172A',
     fontSize: 14,
     fontWeight: '800'
   },
-  footerRow: {
-    marginTop: 16,
-    paddingTop: 16,
+  actionRow: {
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: '#F1F5F9',
+    paddingTop: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
   },
-  footerText: {
-    color: '#334155',
+  actionText: {
+    color: '#166534',
+    fontWeight: '800',
+    flex: 1,
+    paddingRight: 10
+  },
+  actionTextMuted: {
+    color: '#64748B',
     fontWeight: '700'
   },
-  footerLink: {
-    color: '#B45309',
-    fontWeight: '800',
-    fontSize: 13
+  actionArrow: {
+    color: '#166534',
+    fontSize: 28,
+    lineHeight: 28,
+    fontWeight: '700'
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 4
+  },
+  emptyTitle: {
+    color: '#0F172A',
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 8
+  },
+  emptyText: {
+    color: '#64748B',
+    lineHeight: 21
   }
 })

@@ -7,6 +7,7 @@ import {
   rejectFuelRequest,
   serveFuelRequest
 } from '../controllers/fuelRequestController.js'
+import { requireRole, requireSession } from '../middleware/authSession.js'
 
 const router = Router()
 
@@ -14,8 +15,8 @@ router.get('/', getAllFuelRequests)
 router.get('/:id', getFuelRequestById)
 
 router.post('/', createFuelRequest)
-router.patch('/:id/approve', approveFuelRequest)
-router.patch('/:id/reject', rejectFuelRequest)
-router.patch('/:id/serve', serveFuelRequest)
+router.patch('/:id/approve', requireSession, requireRole('chief'), approveFuelRequest)
+router.patch('/:id/reject', requireSession, requireRole('chief'), rejectFuelRequest)
+router.patch('/:id/serve', requireSession, requireRole('pump_attendant'), serveFuelRequest)
 
 export default router

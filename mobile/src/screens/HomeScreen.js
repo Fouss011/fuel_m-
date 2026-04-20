@@ -1,19 +1,20 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native'
 
-const ROLE_CARDS = [
+const DRIVER_CARD = {
+  key: 'driver',
+  title: 'Chauffeur',
+  subtitle: 'Créer une demande, suivre son évolution et consulter son historique.',
+  emoji: '🚛',
+  accent: '#2563EB',
+  soft: '#DBEAFE',
+  route: 'DriverDashboard'
+}
+
+const CHIEF_ACTIONS = [
   {
-    key: 'driver',
-    title: 'Chauffeur',
-    subtitle: 'Créer une demande, suivre son évolution et consulter son historique.',
-    emoji: '🚛',
-    accent: '#2563EB',
-    soft: '#DBEAFE',
-    route: 'DriverDashboard'
-  },
-  {
-    key: 'chief',
-    title: 'Chef',
-    subtitle: 'Valider les demandes, piloter l’activité et superviser l’équipe.',
+    key: 'chief-login',
+    title: 'Chef — Se connecter',
+    subtitle: 'Accéder à une structure déjà créée avec le code PIN chef.',
     emoji: '🧾',
     accent: '#0F766E',
     soft: '#CCFBF1',
@@ -21,16 +22,54 @@ const ROLE_CARDS = [
     params: { role: 'chief' }
   },
   {
-    key: 'pump',
-    title: 'Pompiste',
-    subtitle: 'Confirmer les demandes validées et enregistrer le service effectué.',
-    emoji: '⛽',
-    accent: '#B45309',
-    soft: '#FEF3C7',
-    route: 'PinAccess',
-    params: { role: 'pump' }
+    key: 'chief-create',
+    title: 'Chef — Créer ma structure',
+    subtitle: 'Créer une nouvelle structure et définir les accès chef / pompiste.',
+    emoji: '🏗️',
+    accent: '#7C3AED',
+    soft: '#EDE9FE',
+    route: 'CreateStructure'
   }
 ]
+
+const PUMP_CARD = {
+  key: 'pump_attendant',
+  title: 'Pompiste',
+  subtitle: 'Confirmer les demandes validées et enregistrer le service effectué.',
+  emoji: '⛽',
+  accent: '#B45309',
+  soft: '#FEF3C7',
+  route: 'PinAccess',
+  params: { role: 'pump_attendant' }
+}
+
+function RoleCard({ item, navigation }) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.92}
+      style={styles.card}
+      onPress={() => navigation.navigate(item.route, item.params)}
+    >
+      <View style={[styles.iconWrap, { backgroundColor: item.soft }]}>
+        <View style={[styles.iconInner, { backgroundColor: item.accent }]}>
+          <Text style={styles.iconText}>{item.emoji}</Text>
+        </View>
+      </View>
+
+      <View style={styles.cardBody}>
+        <Text style={styles.cardTitle}>{item.title}</Text>
+        <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
+
+        <View style={styles.cardFooter}>
+          <View style={[styles.dot, { backgroundColor: item.accent }]} />
+          <Text style={styles.cardAction}>Continuer</Text>
+        </View>
+      </View>
+
+      <Text style={styles.chevron}>›</Text>
+    </TouchableOpacity>
+  )
+}
 
 export default function HomeScreen({ navigation }) {
   return (
@@ -47,56 +86,48 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.title}>Gestion carburant</Text>
 
         <Text style={styles.subtitle}>
-          Choisis un espace pour continuer.
+          Choisis le bon parcours selon ton rôle et ta situation.
         </Text>
       </View>
 
-      <View style={styles.rolesHeader}>
-        <Text style={styles.rolesTitle}>Les 3 espaces</Text>
-        <Text style={styles.rolesSubtitle}>
-          Accède directement à l’interface adaptée à ton rôle.
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Chauffeur</Text>
+        <Text style={styles.sectionSubtitle}>
+          Demande de carburant et suivi.
         </Text>
       </View>
+      <RoleCard item={DRIVER_CARD} navigation={navigation} />
 
-      {ROLE_CARDS.map((item) => (
-        <TouchableOpacity
-          key={item.key}
-          activeOpacity={0.92}
-          style={styles.card}
-          onPress={() => navigation.navigate(item.route, item.params)}
-        >
-          <View style={[styles.iconWrap, { backgroundColor: item.soft }]}>
-            <View style={[styles.iconInner, { backgroundColor: item.accent }]}>
-              <Text style={styles.iconText}>{item.emoji}</Text>
-            </View>
-          </View>
-
-          <View style={styles.cardBody}>
-            <Text style={styles.cardTitle}>{item.title}</Text>
-            <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
-
-            <View style={styles.cardFooter}>
-              <View style={[styles.dot, { backgroundColor: item.accent }]} />
-              <Text style={styles.cardAction}>Accéder à l’espace</Text>
-            </View>
-          </View>
-
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Chef</Text>
+        <Text style={styles.sectionSubtitle}>
+          Nouveau chef ou chef déjà rattaché à une structure.
+        </Text>
+      </View>
+      {CHIEF_ACTIONS.map((item) => (
+        <RoleCard key={item.key} item={item} navigation={navigation} />
       ))}
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Pompiste</Text>
+        <Text style={styles.sectionSubtitle}>
+          Confirmation des demandes validées.
+        </Text>
+      </View>
+      <RoleCard item={PUMP_CARD} navigation={navigation} />
 
       <View style={styles.bottomCard}>
         <View style={styles.bottomHeader}>
-          <Text style={styles.bottomTitle}>Fonctionnement</Text>
-          <Text style={styles.bottomBadge}>Simple</Text>
+          <Text style={styles.bottomTitle}>Parcours conseillé</Text>
+          <Text style={styles.bottomBadge}>Clair</Text>
         </View>
 
         <Text style={styles.bottomText}>
-          Chauffeur → validation du chef → confirmation du pompiste
+          Nouveau chef → créer sa structure → définir les PIN → se connecter → gérer l’équipe.
         </Text>
 
         <Text style={styles.bottomHint}>
-          Prochaine évolution : séparation des données par structure pour un usage multi-entreprises.
+          Ainsi, un nouveau client ne tombe plus par erreur sur la structure d’un autre.
         </Text>
       </View>
     </ScrollView>
@@ -150,19 +181,20 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#475569'
   },
-  rolesHeader: {
-    marginBottom: 14
+  sectionHeader: {
+    marginBottom: 12,
+    marginTop: 4
   },
-  rolesTitle: {
+  sectionTitle: {
     fontSize: 22,
     fontWeight: '900',
     color: '#0F172A',
-    marginBottom: 6
+    marginBottom: 4
   },
-  rolesSubtitle: {
+  sectionSubtitle: {
     color: '#475569',
-    fontSize: 15,
-    lineHeight: 22
+    fontSize: 14,
+    lineHeight: 21
   },
   card: {
     backgroundColor: '#FFFFFF',
@@ -201,7 +233,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   cardTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '900',
     color: '#0F172A',
     marginBottom: 6
@@ -223,22 +255,21 @@ const styles = StyleSheet.create({
     marginRight: 8
   },
   cardAction: {
-    color: '#0F172A',
+    fontSize: 13,
     fontWeight: '800',
-    fontSize: 13
+    color: '#334155'
   },
   chevron: {
-    fontSize: 30,
+    fontSize: 34,
     color: '#94A3B8',
-    marginLeft: 8
+    marginLeft: 12,
+    marginTop: -4
   },
   bottomCard: {
-    marginTop: 6,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
+    backgroundColor: '#081B33',
+    borderRadius: 24,
+    padding: 20,
+    marginTop: 8
   },
   bottomHeader: {
     flexDirection: 'row',
@@ -247,13 +278,13 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   bottomTitle: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: '#0F172A'
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900'
   },
   bottomBadge: {
-    backgroundColor: '#E2E8F0',
-    color: '#334155',
+    color: '#081B33',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
@@ -261,14 +292,14 @@ const styles = StyleSheet.create({
     fontWeight: '800'
   },
   bottomText: {
-    color: '#475569',
-    lineHeight: 21,
-    fontSize: 14,
-    marginBottom: 8
+    color: '#E2E8F0',
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 10
   },
   bottomHint: {
-    color: '#64748B',
-    lineHeight: 20,
-    fontSize: 13
+    color: '#CBD5E1',
+    fontSize: 13,
+    lineHeight: 20
   }
 })

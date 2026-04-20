@@ -6,8 +6,10 @@ import dotenv from 'dotenv'
 import fuelRequestRoutes from './routes/fuelRequestRoutes.js'
 import structureRoutes from './routes/structureRoutes.js'
 import userRoutes from './routes/userRoutes.js'
+import authRoutes from './routes/authRoutes.js'
 import { notFound } from './middleware/notFound.js'
 import { errorHandler } from './middleware/errorHandler.js'
+import { attachSession } from './middleware/authSession.js'
 
 dotenv.config()
 
@@ -24,11 +26,12 @@ app.use(
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(morgan('dev'))
+app.use(attachSession)
 
 app.use((req, res, next) => {
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-user-role, x-user-id, x-user-name, x-structure-id, x-structure-name'
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-session-token, x-user-role, x-user-id, x-user-name, x-structure-id, x-structure-name'
   )
   next()
 })
@@ -65,6 +68,7 @@ app.get('/api/health', (req, res) => {
   })
 })
 
+app.use('/api/auth', authRoutes)
 app.use('/api/fuel-requests', fuelRequestRoutes)
 app.use('/api/structures', structureRoutes)
 app.use('/api/users', userRoutes)

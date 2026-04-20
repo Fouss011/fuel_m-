@@ -32,33 +32,70 @@ export default function ConfirmFuelScreen({ route, navigation }) {
       const storedSession = await getStoredSession()
       setSession(storedSession)
 
-      const response = await api.get(`/fuel-requests/${requestId}`)
-      const data = response?.data?.data
+      const response = await api.getFuelRequestById(requestId)
+      const data = response?.data?.data || response?.data || null
 
       setRequest(data)
       setServedLiters(String(data?.approved_liters || data?.requested_liters || ''))
+      setAmount(data?.amount ? String(data.amount) : '')
     } catch (error) {
-      console.log('Erreur chargement confirmation:', error?.response?.data || error.message)
+      console.log('Erreur chargement confirmation:', error?.data || error?.message || error)
 
       Alert.alert(
         'Erreur',
-        error?.response?.data?.message || 'Impossible de charger la demande.'
+        error?.message || 'Impossible de charger la demande.'
       )
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleConfirm() {
-    if (!session?.userId) {
+  function validatePumpSession() {
+    if (!session?.token || !session?.userId || session?.role !== 'pump_attendant') {
       Alert.alert(
         'Session manquante',
         'Aucune session pompiste active. Reconnecte-toi avant de confirmer.'
       )
-      return
+      return false
     }
 
-    if (!servedLiters?.trim()) {
+    return true
+  }
+
+  function validateStructureMatch() {
+    if (!request) return false
+
+    if (session?.structureId && request?.structure_id) {
+      if (Number(session.structureId) !== Number(request.structure_id)) {
+        Alert.alert(
+          'Structure invalide',
+          'Tu ne peux confirmer que les demandes de ta structure.'
+        )
+        return false
+      }
+    } else if (session?.structureName && request?.structure_name) {
+      if (String(session.structureName).trim() !== String(request.structure_name).trim()) {
+        Alert.alert(
+          'Structure invalide',
+          'Tu ne peux confirmer que les demandes de ta structure.'
+        )
+        return false
+      }
+    }
+
+    return true
+  }
+
+  async function handleConfirm() {
+    if (submitting) return
+
+    if (!validatePumpSession()) return
+    if (!validateStructureMatch()) return
+
+    const cleanServedLiters = servedLiters.trim()
+    const cleanAmount = amount.trim()
+
+    if (!cleanServedLiters) {
       Alert.alert(
         'Champ obligatoire',
         'Indique les litres réellement servis avant de valider.'
@@ -66,17 +103,17 @@ export default function ConfirmFuelScreen({ route, navigation }) {
       return
     }
 
-    if (!amount?.trim()) {
+    if (!cleanAmount) {
       Alert.alert(
-        'Champ obligatoire',
+        'Montant manquant',
         'Important : tu dois mettre la somme avant de valider.'
       )
       return
     }
 
     const maxAllowed = Number(request?.approved_liters || request?.requested_liters || 0)
-    const servedValue = Number(servedLiters)
-    const amountValue = Number(amount)
+    const servedValue = Number(cleanServedLiters)
+    const amountValue = Number(cleanAmount)
 
     if (Number.isNaN(servedValue) || servedValue <= 0) {
       Alert.alert(
@@ -86,10 +123,10 @@ export default function ConfirmFuelScreen({ route, navigation }) {
       return
     }
 
-    if (Number.isNaN(amountValue) || amountValue < 0) {
+    if (Number.isNaN(amountValue) || amountValue <= 0) {
       Alert.alert(
         'Montant invalide',
-        'Le montant est obligatoire et doit être un nombre valide.'
+        'Le montant est obligatoire et doit être un nombre valide supérieur à 0.'
       )
       return
     }
@@ -97,47 +134,69 @@ export default function ConfirmFuelScreen({ route, navigation }) {
     if (servedValue > maxAllowed) {
       Alert.alert(
         'Quantité trop élevée',
-        `La quantité servie ne peut pas dépasser ${maxAllowed} L.`
+        `Vous ne pouvez pas mettre un chiffre supérieur à celui validé par le chef. Maximum autorisé : ${maxAllowed} L.`
       )
       return
     }
 
-    if (session?.structureId && request?.structure_id) {
-      if (Number(session.structureId) !== Number(request.structure_id)) {
-        Alert.alert(
-          'Structure invalide',
-          'Tu ne peux confirmer que les demandes de ta structure.'
-        )
-        return
-      }
-    } else if (session?.structureName && request?.structure_name) {
-      if (session.structureName !== request.structure_name) {
-        Alert.alert(
-          'Structure invalide',
-          'Tu ne peux confirmer que les demandes de ta structure.'
-        )
-        return
-      }
+    if (request?.status !== 'approved') {
+      Alert.alert(
+        'Action impossible',
+        'Seules les demandes validées par le chef peuvent être confirmées par le pompiste.'
+      )
+      return
     }
 
     try {
       setSubmitting(true)
 
-      await api.patch(`/fuel-requests/${requestId}/serve`, {
-        pump_attendant_id: session.userId,
+      const response = await api.serveFuelRequest(requestId, {
+        pump_attendant_id: Number(session.userId),
         served_liters: servedValue,
         amount: amountValue
       })
 
-      Alert.alert('Succès', 'Livraison confirmée avec succès.')
-      navigation.goBack()
+      Alert.alert(
+        'Livraison confirmée',
+        response?.message || 'La livraison a bien été confirmée avec succès.',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack()
+          }
+        ]
+      )
     } catch (error) {
-      console.log('Erreur confirmation service:', error?.response?.data || error.message)
+      console.log('Erreur confirmation service:', error?.data || error?.message || error)
+
+      if (error?.status === 400) {
+        Alert.alert(
+          'Confirmation impossible',
+          error?.message ||
+            'Tous les champs obligatoires doivent être remplis avant validation.'
+        )
+        return
+      }
+
+      if (error?.status === 401) {
+        Alert.alert(
+          'Session invalide',
+          'Votre session pompiste a expiré. Reconnectez-vous pour continuer.'
+        )
+        return
+      }
+
+      if (error?.status === 403) {
+        Alert.alert(
+          'Action non autorisée',
+          error?.message || 'Tu n’as pas les droits nécessaires pour confirmer cette livraison.'
+        )
+        return
+      }
 
       Alert.alert(
         'Erreur',
-        error?.response?.data?.message ||
-          'Impossible de confirmer la livraison.'
+        error?.message || 'Impossible de confirmer la livraison.'
       )
     } finally {
       setSubmitting(false)
@@ -148,6 +207,7 @@ export default function ConfirmFuelScreen({ route, navigation }) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#081B33" />
+        <Text style={styles.loadingText}>Chargement de la demande...</Text>
       </View>
     )
   }
@@ -210,6 +270,13 @@ export default function ConfirmFuelScreen({ route, navigation }) {
           Tous les champs saisis ici sont impératifs avant validation finale.
         </Text>
 
+        <View style={styles.infoBox}>
+          <Text style={styles.infoTitle}>Contrôle visible</Text>
+          <Text style={styles.infoText}>
+            Vous ne pouvez pas mettre un chiffre supérieur à celui validé par le chef.
+          </Text>
+        </View>
+
         <Text style={styles.label}>Litres réellement servis</Text>
         <TextInput
           style={styles.input}
@@ -218,6 +285,7 @@ export default function ConfirmFuelScreen({ route, navigation }) {
           onChangeText={setServedLiters}
           placeholder="Ex : 100"
           placeholderTextColor="#94A3B8"
+          editable={!submitting}
         />
 
         <Text style={styles.label}>Montant total</Text>
@@ -228,6 +296,7 @@ export default function ConfirmFuelScreen({ route, navigation }) {
           placeholderTextColor="#94A3B8"
           value={amount}
           onChangeText={setAmount}
+          editable={!submitting}
         />
 
         <TouchableOpacity
@@ -236,9 +305,14 @@ export default function ConfirmFuelScreen({ route, navigation }) {
           disabled={submitting}
           activeOpacity={0.9}
         >
-          <Text style={styles.buttonText}>
-            {submitting ? 'Confirmation...' : 'Confirmer la livraison'}
-          </Text>
+          {submitting ? (
+            <View style={styles.buttonInline}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.buttonTextLoading}>Confirmation en cours...</Text>
+            </View>
+          ) : (
+            <Text style={styles.buttonText}>Confirmer la livraison</Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -258,7 +332,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F3F7FB'
+    backgroundColor: '#F3F7FB',
+    paddingHorizontal: 24
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#475569',
+    fontSize: 15,
+    textAlign: 'center'
   },
   notFoundText: {
     color: '#0F172A',
@@ -337,6 +418,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 14
   },
+  infoBox: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 14
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#1D4ED8',
+    marginBottom: 6
+  },
+  infoText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#1E3A8A'
+  },
   label: {
     marginBottom: 8,
     fontWeight: '800',
@@ -362,9 +462,20 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.7
   },
+  buttonInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   buttonText: {
     color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 16
+  },
+  buttonTextLoading: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    marginLeft: 10
   }
 })

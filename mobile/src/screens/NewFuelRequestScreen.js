@@ -49,18 +49,14 @@ export default function NewFuelRequestScreen({ navigation }) {
 
       const storedSession = await getStoredSession()
 
-      const [
-        savedDriverName,
-        savedDriverId,
-        savedStructureId
-      ] = await Promise.all([
+      const [savedDriverName, savedDriverId, savedStructureId] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.driverName),
         AsyncStorage.getItem(STORAGE_KEYS.driverId),
         AsyncStorage.getItem(STORAGE_KEYS.structureId)
       ])
 
-      const structuresResponse = await api.get('/structures')
-      const fetchedStructures = structuresResponse?.data?.data || []
+      const structuresResponse = await api.getStructures()
+      const fetchedStructures = structuresResponse?.data || []
 
       setStructures(fetchedStructures)
 
@@ -75,6 +71,7 @@ export default function NewFuelRequestScreen({ navigation }) {
         const found = fetchedStructures.find(
           (item) => String(item.id) === String(finalStructureId)
         )
+
         if (found) {
           setSelectedStructureId(found.id)
         } else if (fetchedStructures.length > 0) {
@@ -83,16 +80,13 @@ export default function NewFuelRequestScreen({ navigation }) {
       } else if (fetchedStructures.length > 0) {
         setSelectedStructureId(fetchedStructures[0].id)
       }
-
-      console.log('Structures chargées chauffeur:', fetchedStructures)
-      console.log('Session chauffeur:', {
-        finalDriverName,
-        finalDriverId,
-        finalStructureId
-      })
     } catch (error) {
-      console.log('Erreur chargement infos chauffeur :', error?.response?.data || error.message)
-      Alert.alert('Erreur', 'Impossible de charger les données chauffeur.')
+      console.log('Erreur chargement infos chauffeur :', error?.data || error?.message || error)
+
+      Alert.alert(
+        'Erreur',
+        error?.message || 'Impossible de charger les données chauffeur.'
+      )
     } finally {
       setLoading(false)
     }
@@ -100,11 +94,12 @@ export default function NewFuelRequestScreen({ navigation }) {
 
   async function handleSelectStructure(structure) {
     setSelectedStructureId(structure.id)
+
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.structureId, String(structure.id))
       await AsyncStorage.setItem(STORAGE_KEYS.structureName, structure.name)
     } catch (error) {
-      console.log('Erreur sauvegarde structure locale :', error.message)
+      console.log('Erreur sauvegarde structure locale :', error?.message || error)
     }
   }
 
@@ -113,35 +108,62 @@ export default function NewFuelRequestScreen({ navigation }) {
 
     const cleanDriver = driverName.trim()
     const cleanTruck = truckNumber.trim().toUpperCase()
-    const litersNumber = Number(liters)
+    const litersValue = liters.trim()
+    const litersNumber = Number(litersValue)
 
     if (!cleanDriver) {
-      Alert.alert('Champ manquant', 'Le nom du chauffeur est obligatoire.')
+      Alert.alert(
+        'Champ obligatoire',
+        'Entre le nom du chauffeur avant d’envoyer la demande.'
+      )
       return
     }
 
     if (!selectedStructure) {
-      Alert.alert('Structure obligatoire', 'Sélectionne une structure avant d’envoyer la demande.')
+      Alert.alert(
+        'Structure manquante',
+        'Sélectionne une structure avant d’envoyer la demande.'
+      )
       return
     }
 
     if (!cleanTruck) {
-      Alert.alert('Champ manquant', 'Le numéro du camion est obligatoire.')
+      Alert.alert(
+        'Champ obligatoire',
+        'Entre le numéro du camion avant d’envoyer la demande.'
+      )
       return
     }
 
     if (!fuelType) {
-      Alert.alert('Champ manquant', 'Choisis un type de carburant.')
+      Alert.alert(
+        'Type manquant',
+        'Choisis le type de carburant avant de continuer.'
+      )
       return
     }
 
-    if (!liters.trim()) {
-      Alert.alert('Champ manquant', 'Le nombre de litres demandé est obligatoire.')
+    if (!litersValue) {
+      Alert.alert(
+        'Quantité manquante',
+        'Entre la quantité demandée en litres avant validation.'
+      )
       return
     }
 
-    if (Number.isNaN(litersNumber) || litersNumber <= 0) {
-      Alert.alert('Quantité invalide', 'Le nombre de litres doit être supérieur à 0.')
+    if (Number.isNaN(litersNumber)) {
+      Alert.alert(
+        'Quantité invalide',
+        'La quantité saisie doit être un nombre valide.'
+      )
+      return
+    }
+
+    if (litersNumber <= 0) {
+      Alert.alert(
+        'Quantité invalide',
+        'Le nombre de litres doit être supérieur à 0.'
+      )
       return
     }
 
@@ -161,22 +183,21 @@ export default function NewFuelRequestScreen({ navigation }) {
         payload.driver_id = Number(driverId)
       }
 
-      console.log('Payload envoyé à /fuel-requests :', payload)
-
-      const response = await api.post('/fuel-requests', payload)
-
-      console.log('Réponse création demande :', response?.data)
+      const response = await api.createFuelRequest(payload)
 
       await AsyncStorage.setItem(STORAGE_KEYS.driverName, cleanDriver)
+
       if (driverId) {
         await AsyncStorage.setItem(STORAGE_KEYS.driverId, String(driverId))
       }
+
       await AsyncStorage.setItem(STORAGE_KEYS.structureId, String(selectedStructure.id))
       await AsyncStorage.setItem(STORAGE_KEYS.structureName, selectedStructure.name)
 
       Alert.alert(
         'Demande envoyée',
-        'Votre demande est envoyée. Elle est maintenant en attente de confirmation du chef.'
+        response?.message ||
+          'Votre demande a bien été envoyée. Elle est maintenant en attente de validation par le chef.'
       )
 
       setTruckNumber('')
@@ -184,16 +205,31 @@ export default function NewFuelRequestScreen({ navigation }) {
       setFuelType('gasoil')
     } catch (error) {
       console.log('Erreur création demande détaillée :', {
-        status: error?.response?.status,
-        data: error?.response?.data,
+        status: error?.status,
+        code: error?.code,
+        data: error?.data,
         message: error?.message
       })
 
+      if (error?.status === 400) {
+        Alert.alert(
+          'Données invalides',
+          error?.message || 'Tous les champs obligatoires doivent être remplis avant validation.'
+        )
+        return
+      }
+
+      if (error?.status === 401) {
+        Alert.alert(
+          'Session invalide',
+          'Votre session a expiré ou est invalide. Reconnectez-vous pour continuer.'
+        )
+        return
+      }
+
       Alert.alert(
         'Échec de l’envoi',
-        error?.response?.data?.message ||
-          error?.message ||
-          'Impossible de créer la demande.'
+        error?.message || 'Impossible de créer la demande pour le moment.'
       )
     } finally {
       setSubmitting(false)
@@ -204,6 +240,7 @@ export default function NewFuelRequestScreen({ navigation }) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#081B33" />
+        <Text style={styles.loadingText}>Chargement des données...</Text>
       </View>
     )
   }
@@ -218,7 +255,7 @@ export default function NewFuelRequestScreen({ navigation }) {
         <Text style={styles.badge}>CHAUFFEUR</Text>
         <Text style={styles.heroTitle}>Nouvelle demande carburant</Text>
         <Text style={styles.heroSubtitle}>
-          Sélectionne la structure, puis renseigne le camion et la quantité.
+          Renseigne les informations ci-dessous puis envoie la demande au chef pour validation.
         </Text>
       </View>
 
@@ -230,6 +267,7 @@ export default function NewFuelRequestScreen({ navigation }) {
           placeholder="Nom du chauffeur"
           style={styles.input}
           placeholderTextColor="#94A3B8"
+          editable={!submitting}
         />
 
         <Text style={styles.label}>Structure</Text>
@@ -248,6 +286,7 @@ export default function NewFuelRequestScreen({ navigation }) {
                 style={[styles.chip, active && styles.chipActive]}
                 onPress={() => handleSelectStructure(item)}
                 activeOpacity={0.9}
+                disabled={submitting}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
                   {item.name}
@@ -269,18 +308,21 @@ export default function NewFuelRequestScreen({ navigation }) {
           autoCapitalize="characters"
           style={styles.input}
           placeholderTextColor="#94A3B8"
+          editable={!submitting}
         />
 
         <Text style={styles.label}>Type de carburant</Text>
         <View style={styles.optionRow}>
           {FUEL_OPTIONS.map((option) => {
             const selected = fuelType === option.value
+
             return (
               <TouchableOpacity
                 key={option.value}
                 style={[styles.optionButton, selected && styles.optionButtonActive]}
                 onPress={() => setFuelType(option.value)}
                 activeOpacity={0.9}
+                disabled={submitting}
               >
                 <Text style={[styles.optionText, selected && styles.optionTextActive]}>
                   {option.label}
@@ -298,7 +340,15 @@ export default function NewFuelRequestScreen({ navigation }) {
           keyboardType="numeric"
           style={styles.input}
           placeholderTextColor="#94A3B8"
+          editable={!submitting}
         />
+
+        <View style={styles.infoBox}>
+          <Text style={styles.infoTitle}>Avant envoi</Text>
+          <Text style={styles.infoText}>
+            Tous les champs obligatoires doivent être remplis avant validation.
+          </Text>
+        </View>
 
         <TouchableOpacity
           style={[styles.button, submitting && styles.buttonDisabled]}
@@ -306,9 +356,14 @@ export default function NewFuelRequestScreen({ navigation }) {
           activeOpacity={0.9}
           disabled={submitting}
         >
-          <Text style={styles.buttonText}>
-            {submitting ? 'Envoi en cours...' : 'Envoyer la demande'}
-          </Text>
+          {submitting ? (
+            <View style={styles.buttonInline}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.buttonTextLoading}>Envoi en cours...</Text>
+            </View>
+          ) : (
+            <Text style={styles.buttonText}>Envoyer la demande</Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -320,7 +375,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F3F7FB'
+    backgroundColor: '#F3F7FB',
+    paddingHorizontal: 24
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#475569',
+    fontSize: 15,
+    textAlign: 'center'
   },
   container: {
     flex: 1,
@@ -437,6 +499,26 @@ const styles = StyleSheet.create({
   optionTextActive: {
     color: '#FFFFFF'
   },
+  infoBox: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 10,
+    marginTop: 4
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#1D4ED8',
+    marginBottom: 6
+  },
+  infoText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#1E3A8A'
+  },
   button: {
     backgroundColor: '#081B33',
     borderRadius: 18,
@@ -447,9 +529,20 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.7
   },
+  buttonInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   buttonText: {
     color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 16
+  },
+  buttonTextLoading: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    marginLeft: 10
   }
 })
