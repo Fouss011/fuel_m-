@@ -7,38 +7,55 @@ drop table if exists structures cascade;
 
 -- =====================================
 -- TABLE STRUCTURES
+-- 1 structure = 1 chef propriétaire
 -- =====================================
 create table structures (
   id bigserial primary key,
-  name text not null unique,
+  name text not null,
+  structure_code text not null unique,
   owner_name text not null,
   owner_phone text not null unique,
-  pin_chief text not null,
-  pin_pump text not null,
+  owner_password text not null,
   created_at timestamptz not null default now(),
 
   constraint structures_name_not_blank check (length(trim(name)) > 0),
+  constraint structures_structure_code_not_blank check (length(trim(structure_code)) > 0),
   constraint structures_owner_name_not_blank check (length(trim(owner_name)) > 0),
   constraint structures_owner_phone_not_blank check (length(trim(owner_phone)) > 0),
-  constraint structures_pin_chief_format check (pin_chief ~ '^[0-9]{4,8}$'),
-  constraint structures_pin_pump_format check (pin_pump ~ '^[0-9]{4,8}$'),
-  constraint structures_pin_different check (pin_chief <> pin_pump)
+  constraint structures_owner_password_not_blank check (length(trim(owner_password)) >= 4),
+  constraint structures_structure_code_format check (structure_code ~ '^[A-Z0-9_-]{4,20}$')
 );
+
+create unique index idx_structures_name_lower_unique
+on structures (lower(name));
+
+create index idx_structures_structure_code on structures(structure_code);
+create index idx_structures_owner_phone on structures(owner_phone);
 
 -- =====================================
 -- TABLE USERS
+-- Membres rattachés à une structure
+-- chief = créé automatiquement à la création structure
+-- driver = chauffeur
+-- pump_attendant = pompiste
 -- =====================================
 create table users (
   id bigserial primary key,
   structure_id bigint not null references structures(id) on delete cascade,
   name text not null,
-  phone text not null unique,
-  password_hash text,
-  role text not null check (role in ('driver', 'chief', 'pump_attendant')),
+  phone text,
+  truck_number text,
+  pin_code text,
+  role text not null check (role in ('chief', 'driver', 'pump_attendant')),
+  is_active boolean not null default true,
   created_at timestamptz not null default now(),
 
   constraint users_name_not_blank check (length(trim(name)) > 0),
-  constraint users_phone_not_blank check (length(trim(phone)) > 0)
+  constraint users_phone_blank_or_not_blank check (phone is null or length(trim(phone)) > 0),
+  constraint users_truck_blank_or_not_blank check (truck_number is null or length(trim(truck_number)) > 0),
+  constraint users_pin_blank_or_valid check (
+    pin_code is null or pin_code ~ '^[0-9]{4,8}$'
+  )
 );
 
 -- un seul chef par structure
@@ -46,12 +63,29 @@ create unique index uniq_one_chief_per_structure
 on users(structure_id)
 where role = 'chief';
 
+-- pas deux chauffeurs avec le même nom dans une même structure
+create unique index uniq_driver_name_per_structure
+on users(structure_id, lower(name))
+where role = 'driver';
+
+-- pas deux pompistes avec le même nom dans une même structure
+create unique index uniq_pump_name_per_structure
+on users(structure_id, lower(name))
+where role = 'pump_attendant';
+
+-- téléphone unique seulement si renseigné
+create unique index uniq_users_phone
+on users(phone)
+where phone is not null;
+
 create index idx_users_structure_id on users(structure_id);
 create index idx_users_role on users(role);
-create index idx_users_phone on users(phone);
+create index idx_users_name on users(name);
+create index idx_users_truck_number on users(truck_number);
 
 -- =====================================
 -- TABLE FUEL REQUESTS
+-- demandes liées à la structure et au chauffeur
 -- =====================================
 create table fuel_requests (
   id bigserial primary key,
@@ -135,7 +169,6 @@ create index idx_fuel_requests_driver_id on fuel_requests(driver_id);
 create index idx_fuel_requests_chief_id on fuel_requests(chief_id);
 create index idx_fuel_requests_pump_attendant_id on fuel_requests(pump_attendant_id);
 create index idx_fuel_requests_structure_id on fuel_requests(structure_id);
-create index idx_fuel_requests_structure_name on fuel_requests(structure_name);
+create index idx_fuel_requests_created_at on fuel_requests(created_at desc);
 create index idx_fuel_requests_driver_name on fuel_requests(driver_name);
 create index idx_fuel_requests_truck_number on fuel_requests(truck_number);
-create index idx_fuel_requests_created_at on fuel_requests(created_at desc);

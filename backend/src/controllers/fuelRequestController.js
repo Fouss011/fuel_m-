@@ -1,11 +1,22 @@
 import { supabase } from '../config/supabaseClient.js'
 
 const VALID_STATUSES = ['pending', 'approved', 'rejected', 'served']
+const VALID_FUEL_TYPES = ['gasoil', 'essence']
 
 function normalizeString(value) {
   if (value === undefined || value === null) return null
-  const cleaned = String(value).trim()
-  return cleaned ? cleaned : null
+  const clean = String(value).trim()
+  return clean || null
+}
+
+function normalizeFuelType(value) {
+  const clean = normalizeString(value)
+  return clean ? clean.toLowerCase() : null
+}
+
+function normalizeTruckNumber(value) {
+  const clean = normalizeString(value)
+  return clean ? clean.toUpperCase() : null
 }
 
 function parsePositiveNumber(value) {
@@ -22,201 +33,134 @@ function parseOptionalNumber(value) {
 }
 
 function parseId(value) {
-  const normalized = normalizeString(value)
-  if (!normalized) return null
+  const clean = normalizeString(value)
+  if (!clean) return null
 
-  const parsed = Number(normalized)
+  const parsed = Number(clean)
   if (!Number.isInteger(parsed) || parsed <= 0) return NaN
 
   return parsed
 }
 
-function getContext(req) {
-  return {
-    role: normalizeString(req.headers['x-user-role']) || normalizeString(req.query.role),
-    userId:
-      parseId(req.headers['x-user-id']) ||
-      parseId(req.query.user_id) ||
-      parseId(req.body?.driver_id) ||
-      null,
-    structureId:
-      parseId(req.headers['x-structure-id']) ||
-      parseId(req.query.structure_id) ||
-      parseId(req.body?.structure_id) ||
-      null,
-    structureName:
-      normalizeString(req.headers['x-structure-name']) ||
-      normalizeString(req.query.structure_name) ||
-      normalizeString(req.body?.structure_name) ||
-      null
-  }
+function sanitizeRequest(record) {
+  return record
 }
 
 async function getStructureById(structureId) {
   const { data, error } = await supabase
     .from('structures')
-    .select('id, name')
+    .select('id, name, structure_code')
     .eq('id', structureId)
-    .single()
-
-  if (error) {
-    if (error.code === 'PGRST116') return null
-    throw error
-  }
-
-  return data
-}
-
-async function getStructureByName(structureName) {
-  const cleanName = normalizeString(structureName)
-  if (!cleanName) return null
-
-  const { data, error } = await supabase
-    .from('structures')
-    .select('id, name')
-    .ilike('name', cleanName)
     .maybeSingle()
 
   if (error) throw error
-  return data || null
+  return data
 }
 
 async function getUserById(userId) {
   const { data, error } = await supabase
     .from('users')
-    .select('id, name, phone, role, structure_id')
+    .select('id, structure_id, name, phone, truck_number, role, is_active')
     .eq('id', userId)
-    .single()
+    .maybeSingle()
 
-  if (error) {
-    if (error.code === 'PGRST116') return null
-    throw error
-  }
-
+  if (error) throw error
   return data
 }
 
-async function resolveStructure({ structureId, structureName, driverId }) {
-  let finalStructureId = structureId || null
-  let finalStructureName = structureName || null
+async function getFuelRequestByIdInternal(id) {
+  const { data, error } = await supabase
+    .from('fuel_requests')
+    .select(`
+      *,
+      driver:users!fuel_requests_driver_id_fkey(id, name, phone, truck_number, role),
+      chief:users!fuel_requests_chief_id_fkey(id, name, phone, role),
+      pump_attendant:users!fuel_requests_pump_attendant_id_fkey(id, name, phone, role)
+    `)
+    .eq('id', id)
+    .maybeSingle()
 
-  if (!finalStructureId && driverId) {
-    const driver = await getUserById(driverId)
-
-    if (!driver) {
-      throw {
-        status: 404,
-        success: false,
-        message: 'Chauffeur introuvable'
-      }
-    }
-
-    if (driver.role !== 'driver') {
-      throw {
-        status: 400,
-        success: false,
-        message: 'L’utilisateur fourni n’est pas un chauffeur'
-      }
-    }
-
-    if (driver.structure_id) {
-      finalStructureId = driver.structure_id
-    }
-  }
-
-  if (!finalStructureId && finalStructureName) {
-    const structureByName = await getStructureByName(finalStructureName)
-
-    if (!structureByName) {
-      throw {
-        status: 404,
-        success: false,
-        message: 'Structure introuvable. Vérifie le nom de la structure.'
-      }
-    }
-
-    finalStructureId = structureByName.id
-    finalStructureName = structureByName.name
-  }
-
-  if (finalStructureId) {
-    const structureById = await getStructureById(finalStructureId)
-
-    if (!structureById) {
-      throw {
-        status: 404,
-        success: false,
-        message: 'Structure introuvable'
-      }
-    }
-
-    finalStructureId = structureById.id
-    finalStructureName = structureById.name
-  }
-
-  if (!finalStructureId || !finalStructureName) {
-    throw {
-      status: 400,
-      success: false,
-      message: 'Impossible de déterminer la structure liée à cette demande'
-    }
-  }
-
-  return {
-    structure_id: finalStructureId,
-    structure_name: finalStructureName
-  }
+  if (error) throw error
+  return data
 }
 
 export async function createFuelRequest(req, res, next) {
   try {
-    const context = getContext(req)
+    if (!req.auth) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session invalide ou expirée.'
+      })
+    }
 
-    const cleanDriverId = parseId(req.body?.driver_id) || context.userId
-    const cleanDriverName = normalizeString(req.body?.driver_name)
-    const cleanTruckNumber = normalizeString(req.body?.truck_number)?.toUpperCase() || null
-    const cleanFuelType = normalizeString(req.body?.fuel_type)
+    if (req.auth.role !== 'driver') {
+      return res.status(403).json({
+        success: false,
+        message: 'Seul un chauffeur peut créer une demande.'
+      })
+    }
+
+    const driverId = Number(req.auth.userId)
+    const structureId = Number(req.auth.structureId)
+    const fuelType = normalizeFuelType(req.body?.fuel_type)
     const requestedLiters = parsePositiveNumber(req.body?.requested_liters)
 
-    if (!cleanDriverName || !cleanTruckNumber || !cleanFuelType || req.body?.requested_liters === undefined) {
-      return res.status(400).json({
+    const driver = await getUserById(driverId)
+
+    if (!driver || !driver.is_active || driver.role !== 'driver') {
+      return res.status(404).json({
         success: false,
-        message: 'driver_name, truck_number, fuel_type et requested_liters sont obligatoires'
+        message: 'Chauffeur introuvable ou inactif.'
       })
     }
 
-    if (Number.isNaN(requestedLiters)) {
-      return res.status(400).json({
+    if (Number(driver.structure_id) !== structureId) {
+      return res.status(403).json({
         success: false,
-        message: 'requested_liters doit être un nombre supérieur à 0'
+        message: 'Ce chauffeur n’appartient pas à cette structure.'
       })
     }
 
-    const resolvedStructure = await resolveStructure({
-      structureId: parseId(req.body?.structure_id) || context.structureId,
-      structureName: normalizeString(req.body?.structure_name) || context.structureName,
-      driverId: cleanDriverId
-    })
+    const structure = await getStructureById(structureId)
+
+    if (!structure) {
+      return res.status(404).json({
+        success: false,
+        message: 'Structure introuvable.'
+      })
+    }
+
+    if (!fuelType || !VALID_FUEL_TYPES.includes(fuelType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le type de carburant doit être gasoil ou essence.'
+      })
+    }
+
+    if (req.body?.requested_liters === undefined || Number.isNaN(requestedLiters)) {
+      return res.status(400).json({
+        success: false,
+        message: 'La quantité demandée doit être un nombre supérieur à 0.'
+      })
+    }
 
     const payload = {
-      structure_id: resolvedStructure.structure_id,
-      structure_name: resolvedStructure.structure_name,
-      driver_id: cleanDriverId || null,
-      driver_name: cleanDriverName,
-      truck_number: cleanTruckNumber,
-      fuel_type: cleanFuelType,
+      structure_id: structure.id,
+      structure_name: structure.name,
+      driver_id: driver.id,
+      driver_name: driver.name,
+      truck_number: normalizeTruckNumber(driver.truck_number),
+      fuel_type: fuelType,
       requested_liters: requestedLiters,
       status: 'pending'
     }
-
-    console.log('Payload final fuel request:', payload)
 
     const { data, error } = await supabase
       .from('fuel_requests')
       .insert([payload])
       .select(`
         *,
-        driver:users!fuel_requests_driver_id_fkey(id, name, phone, role),
+        driver:users!fuel_requests_driver_id_fkey(id, name, phone, truck_number, role),
         chief:users!fuel_requests_chief_id_fkey(id, name, phone, role),
         pump_attendant:users!fuel_requests_pump_attendant_id_fkey(id, name, phone, role)
       `)
@@ -226,82 +170,60 @@ export async function createFuelRequest(req, res, next) {
 
     return res.status(201).json({
       success: true,
-      message: 'Demande de carburant créée avec succès',
-      data
+      message: 'Demande de carburant créée avec succès.',
+      data: sanitizeRequest(data)
     })
   } catch (error) {
-    if (error?.success === false) {
-      return res.status(error.status || 400).json(error)
-    }
-
     next(error)
   }
 }
 
 export async function getAllFuelRequests(req, res, next) {
   try {
-    const context = getContext(req)
-
-    const status = normalizeString(req.query.status)
-    const role = normalizeString(req.query.role) || context.role
-    const userId = parseId(req.query.user_id) || context.userId
-    const structureId = parseId(req.query.structure_id) || context.structureId
-    const structureName = normalizeString(req.query.structure_name) || context.structureName
-    const driverName = normalizeString(req.query.driver_name)
-    const truckNumber = normalizeString(req.query.truck_number)
-
-    if (!structureId && !structureName) {
-      return res.status(400).json({
+    if (!req.auth) {
+      return res.status(401).json({
         success: false,
-        message: 'La structure est obligatoire pour charger les demandes'
+        message: 'Session invalide ou expirée.'
       })
     }
+
+    const status = normalizeString(req.query?.status)
+    const structureId = Number(req.auth.structureId)
+    const role = req.auth.role
+    const userId = Number(req.auth.userId)
 
     let query = supabase
       .from('fuel_requests')
       .select(`
         *,
-        driver:users!fuel_requests_driver_id_fkey(id, name, phone, role),
+        driver:users!fuel_requests_driver_id_fkey(id, name, phone, truck_number, role),
         chief:users!fuel_requests_chief_id_fkey(id, name, phone, role),
         pump_attendant:users!fuel_requests_pump_attendant_id_fkey(id, name, phone, role)
       `)
+      .eq('structure_id', structureId)
       .order('created_at', { ascending: false })
 
     if (status) {
       if (!VALID_STATUSES.includes(status)) {
         return res.status(400).json({
           success: false,
-          message: 'Statut invalide'
+          message: 'Statut invalide.'
         })
       }
       query = query.eq('status', status)
     }
 
-    if (structureId) {
-      query = query.eq('structure_id', structureId)
-    } else {
-      query = query.ilike('structure_name', structureName)
-    }
-
-    if (role === 'driver' && userId) {
+    if (role === 'driver') {
       query = query.eq('driver_id', userId)
-    }
-
-    if (driverName) {
-      query = query.ilike('driver_name', `%${driverName}%`)
-    }
-
-    if (truckNumber) {
-      query = query.ilike('truck_number', `%${truckNumber}%`)
     }
 
     const { data, error } = await query
 
     if (error) throw error
 
-    res.json({
+    return res.json({
       success: true,
-      data
+      data: (data || []).map(sanitizeRequest)
     })
   } catch (error) {
     next(error)
@@ -310,49 +232,48 @@ export async function getAllFuelRequests(req, res, next) {
 
 export async function getFuelRequestById(req, res, next) {
   try {
-    const context = getContext(req)
-    const { id } = req.params
-
-    const { data, error } = await supabase
-      .from('fuel_requests')
-      .select(`
-        *,
-        driver:users!fuel_requests_driver_id_fkey(id, name, phone, role),
-        chief:users!fuel_requests_chief_id_fkey(id, name, phone, role),
-        pump_attendant:users!fuel_requests_pump_attendant_id_fkey(id, name, phone, role)
-      `)
-      .eq('id', id)
-      .single()
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          success: false,
-          message: 'Demande introuvable'
-        })
-      }
-      throw error
-    }
-
-    if (context.structureId && Number(data.structure_id) !== Number(context.structureId)) {
-      return res.status(403).json({
+    if (!req.auth) {
+      return res.status(401).json({
         success: false,
-        message: 'Accès refusé à cette demande'
+        message: 'Session invalide ou expirée.'
       })
     }
 
-    if (!context.structureId && context.structureName) {
-      if (normalizeString(data.structure_name) !== context.structureName) {
-        return res.status(403).json({
-          success: false,
-          message: 'Accès refusé à cette demande'
-        })
-      }
+    const id = Number(req.params.id)
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant demande invalide.'
+      })
     }
 
-    res.json({
+    const data = await getFuelRequestByIdInternal(id)
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: 'Demande introuvable.'
+      })
+    }
+
+    if (Number(data.structure_id) !== Number(req.auth.structureId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé à cette demande.'
+      })
+    }
+
+    if (req.auth.role === 'driver' && Number(data.driver_id) !== Number(req.auth.userId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Tu ne peux pas voir la demande d’un autre chauffeur.'
+      })
+    }
+
+    return res.json({
       success: true,
-      data
+      data: sanitizeRequest(data)
     })
   } catch (error) {
     next(error)
@@ -361,83 +282,79 @@ export async function getFuelRequestById(req, res, next) {
 
 export async function approveFuelRequest(req, res, next) {
   try {
-    const context = getContext(req)
-    const { id } = req.params
-    const chiefId = parseId(req.body?.chief_id) || context.userId
-    const liters = parsePositiveNumber(req.body?.approved_liters)
-
-    if (!chiefId || req.body?.approved_liters === undefined) {
-      return res.status(400).json({
+    if (!req.auth) {
+      return res.status(401).json({
         success: false,
-        message: 'chief_id et approved_liters sont obligatoires'
+        message: 'Session invalide ou expirée.'
       })
     }
 
-    if (Number.isNaN(liters)) {
-      return res.status(400).json({
+    if (req.auth.role !== 'chief') {
+      return res.status(403).json({
         success: false,
-        message: 'approved_liters doit être un nombre supérieur à 0'
+        message: 'Seul le chef peut valider une demande.'
       })
     }
 
-    const chief = await getUserById(chiefId)
+    const id = Number(req.params.id)
+    const approvedLiters = parsePositiveNumber(req.body?.approved_liters)
 
-    if (!chief) {
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant demande invalide.'
+      })
+    }
+
+    if (req.body?.approved_liters === undefined || Number.isNaN(approvedLiters)) {
+      return res.status(400).json({
+        success: false,
+        message: 'La quantité validée doit être un nombre supérieur à 0.'
+      })
+    }
+
+    const existing = await getFuelRequestByIdInternal(id)
+
+    if (!existing) {
       return res.status(404).json({
         success: false,
-        message: 'Chef introuvable'
+        message: 'Demande introuvable.'
       })
     }
 
-    if (chief.role !== 'chief') {
-      return res.status(400).json({
+    if (Number(existing.structure_id) !== Number(req.auth.structureId)) {
+      return res.status(403).json({
         success: false,
-        message: 'L’utilisateur fourni n’est pas un chef'
+        message: 'Tu ne peux pas valider une demande d’une autre structure.'
       })
-    }
-
-    const { data: existing, error: findError } = await supabase
-      .from('fuel_requests')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (findError) {
-      if (findError.code === 'PGRST116') {
-        return res.status(404).json({
-          success: false,
-          message: 'Demande introuvable'
-        })
-      }
-      throw findError
     }
 
     if (existing.status !== 'pending') {
       return res.status(400).json({
         success: false,
-        message: 'Seules les demandes en attente peuvent être validées'
+        message: 'Seules les demandes en attente peuvent être validées.'
       })
     }
 
-    if (Number(chief.structure_id) !== Number(existing.structure_id)) {
-      return res.status(403).json({
+    if (approvedLiters > Number(existing.requested_liters)) {
+      return res.status(400).json({
         success: false,
-        message: 'Ce chef ne peut pas valider une demande d’une autre structure'
+        message: 'La quantité validée ne peut pas dépasser la quantité demandée.'
       })
     }
 
     const { data, error } = await supabase
       .from('fuel_requests')
       .update({
-        chief_id: chiefId,
-        approved_liters: liters,
+        chief_id: Number(req.auth.userId),
+        approved_liters: approvedLiters,
         status: 'approved',
         approved_at: new Date().toISOString()
       })
       .eq('id', id)
       .select(`
         *,
-        driver:users!fuel_requests_driver_id_fkey(id, name, phone, role),
+        driver:users!fuel_requests_driver_id_fkey(id, name, phone, truck_number, role),
         chief:users!fuel_requests_chief_id_fkey(id, name, phone, role),
         pump_attendant:users!fuel_requests_pump_attendant_id_fkey(id, name, phone, role)
       `)
@@ -445,10 +362,10 @@ export async function approveFuelRequest(req, res, next) {
 
     if (error) throw error
 
-    res.json({
+    return res.json({
       success: true,
-      message: 'Demande validée avec succès',
-      data
+      message: 'Demande validée avec succès.',
+      data: sanitizeRequest(data)
     })
   } catch (error) {
     next(error)
@@ -457,74 +374,63 @@ export async function approveFuelRequest(req, res, next) {
 
 export async function rejectFuelRequest(req, res, next) {
   try {
-    const context = getContext(req)
-    const { id } = req.params
-    const chiefId = parseId(req.body?.chief_id) || context.userId
-
-    if (!chiefId) {
-      return res.status(400).json({
+    if (!req.auth) {
+      return res.status(401).json({
         success: false,
-        message: 'chief_id est obligatoire'
+        message: 'Session invalide ou expirée.'
       })
     }
 
-    const chief = await getUserById(chiefId)
+    if (req.auth.role !== 'chief') {
+      return res.status(403).json({
+        success: false,
+        message: 'Seul le chef peut refuser une demande.'
+      })
+    }
 
-    if (!chief) {
+    const id = Number(req.params.id)
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant demande invalide.'
+      })
+    }
+
+    const existing = await getFuelRequestByIdInternal(id)
+
+    if (!existing) {
       return res.status(404).json({
         success: false,
-        message: 'Chef introuvable'
+        message: 'Demande introuvable.'
       })
     }
 
-    if (chief.role !== 'chief') {
-      return res.status(400).json({
+    if (Number(existing.structure_id) !== Number(req.auth.structureId)) {
+      return res.status(403).json({
         success: false,
-        message: 'L’utilisateur fourni n’est pas un chef'
+        message: 'Tu ne peux pas refuser une demande d’une autre structure.'
       })
-    }
-
-    const { data: existing, error: findError } = await supabase
-      .from('fuel_requests')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (findError) {
-      if (findError.code === 'PGRST116') {
-        return res.status(404).json({
-          success: false,
-          message: 'Demande introuvable'
-        })
-      }
-      throw findError
     }
 
     if (existing.status !== 'pending') {
       return res.status(400).json({
         success: false,
-        message: 'Seules les demandes en attente peuvent être refusées'
-      })
-    }
-
-    if (Number(chief.structure_id) !== Number(existing.structure_id)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Ce chef ne peut pas refuser une demande d’une autre structure'
+        message: 'Seules les demandes en attente peuvent être refusées.'
       })
     }
 
     const { data, error } = await supabase
       .from('fuel_requests')
       .update({
-        chief_id: chiefId,
+        chief_id: Number(req.auth.userId),
         status: 'rejected',
         approved_at: new Date().toISOString()
       })
       .eq('id', id)
       .select(`
         *,
-        driver:users!fuel_requests_driver_id_fkey(id, name, phone, role),
+        driver:users!fuel_requests_driver_id_fkey(id, name, phone, truck_number, role),
         chief:users!fuel_requests_chief_id_fkey(id, name, phone, role),
         pump_attendant:users!fuel_requests_pump_attendant_id_fkey(id, name, phone, role)
       `)
@@ -532,10 +438,10 @@ export async function rejectFuelRequest(req, res, next) {
 
     if (error) throw error
 
-    res.json({
+    return res.json({
       success: true,
-      message: 'Demande refusée',
-      data
+      message: 'Demande refusée.',
+      data: sanitizeRequest(data)
     })
   } catch (error) {
     next(error)
@@ -544,93 +450,82 @@ export async function rejectFuelRequest(req, res, next) {
 
 export async function serveFuelRequest(req, res, next) {
   try {
-    const context = getContext(req)
-    const { id } = req.params
-    const pumpId = parseId(req.body?.pump_attendant_id) || context.userId
-    const liters = parsePositiveNumber(req.body?.served_liters)
+    if (!req.auth) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session invalide ou expirée.'
+      })
+    }
+
+    if (req.auth.role !== 'pump_attendant') {
+      return res.status(403).json({
+        success: false,
+        message: 'Seul le pompiste peut confirmer le service.'
+      })
+    }
+
+    const id = Number(req.params.id)
+    const servedLiters = parsePositiveNumber(req.body?.served_liters)
     const amount = parseOptionalNumber(req.body?.amount)
 
-    if (!pumpId || req.body?.served_liters === undefined || req.body?.amount === undefined || req.body?.amount === '') {
+    if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'pump_attendant_id, served_liters et amount sont obligatoires'
+        message: 'Identifiant demande invalide.'
       })
     }
 
-    if (Number.isNaN(liters)) {
+    if (req.body?.served_liters === undefined || Number.isNaN(servedLiters)) {
       return res.status(400).json({
         success: false,
-        message: 'served_liters doit être un nombre supérieur à 0'
+        message: 'La quantité servie doit être un nombre supérieur à 0.'
       })
     }
 
-    if (Number.isNaN(amount) || amount === null || amount < 0) {
+    if (amount === null || Number.isNaN(amount) || amount < 0) {
       return res.status(400).json({
         success: false,
-        message: 'Le montant est obligatoire et doit être un nombre valide'
+        message: 'Le montant est obligatoire et doit être un nombre valide.'
       })
     }
 
-    const pump = await getUserById(pumpId)
+    const existing = await getFuelRequestByIdInternal(id)
 
-    if (!pump) {
+    if (!existing) {
       return res.status(404).json({
         success: false,
-        message: 'Pompiste introuvable'
+        message: 'Demande introuvable.'
       })
     }
 
-    if (pump.role !== 'pump_attendant') {
-      return res.status(400).json({
+    if (Number(existing.structure_id) !== Number(req.auth.structureId)) {
+      return res.status(403).json({
         success: false,
-        message: 'L’utilisateur fourni n’est pas un pompiste'
+        message: 'Tu ne peux pas servir une demande d’une autre structure.'
       })
-    }
-
-    const { data: existing, error: findError } = await supabase
-      .from('fuel_requests')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (findError) {
-      if (findError.code === 'PGRST116') {
-        return res.status(404).json({
-          success: false,
-          message: 'Demande introuvable'
-        })
-      }
-      throw findError
     }
 
     if (existing.status !== 'approved') {
       return res.status(400).json({
         success: false,
-        message: 'Seules les demandes validées peuvent être servies'
-      })
-    }
-
-    if (Number(pump.structure_id) !== Number(existing.structure_id)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Ce pompiste ne peut pas servir une demande d’une autre structure'
+        message: 'Seules les demandes validées peuvent être servies.'
       })
     }
 
     const maxAllowed = Number(existing.approved_liters || existing.requested_liters || 0)
 
-    if (liters > maxAllowed) {
+    if (servedLiters > maxAllowed) {
       return res.status(400).json({
         success: false,
-        message: `La quantité servie ne peut pas dépasser ${maxAllowed} L`
+        message: `La quantité servie ne peut pas dépasser ${maxAllowed} L.`
       })
     }
 
     const { data, error } = await supabase
       .from('fuel_requests')
       .update({
-        pump_attendant_id: pumpId,
-        served_liters: liters,
+        pump_attendant_id: Number(req.auth.userId),
+        served_liters: servedLiters,
         amount,
         status: 'served',
         served_at: new Date().toISOString()
@@ -638,7 +533,7 @@ export async function serveFuelRequest(req, res, next) {
       .eq('id', id)
       .select(`
         *,
-        driver:users!fuel_requests_driver_id_fkey(id, name, phone, role),
+        driver:users!fuel_requests_driver_id_fkey(id, name, phone, truck_number, role),
         chief:users!fuel_requests_chief_id_fkey(id, name, phone, role),
         pump_attendant:users!fuel_requests_pump_attendant_id_fkey(id, name, phone, role)
       `)
@@ -646,10 +541,10 @@ export async function serveFuelRequest(req, res, next) {
 
     if (error) throw error
 
-    res.json({
+    return res.json({
       success: true,
-      message: 'Livraison de carburant confirmée',
-      data
+      message: 'Livraison de carburant confirmée.',
+      data: sanitizeRequest(data)
     })
   } catch (error) {
     next(error)

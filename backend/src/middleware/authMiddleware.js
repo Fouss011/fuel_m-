@@ -65,3 +65,30 @@ export function authorizeRoles(...allowedRoles) {
     next()
   }
 }
+
+export function requireSameStructure(req, res, next) {
+  if (!req.auth) {
+    return res.status(401).json({
+      success: false,
+      message: 'Session invalide ou expirée.'
+    })
+  }
+
+  const structureIdFromParams =
+    req.params?.structureId ||
+    req.body?.structure_id ||
+    req.query?.structure_id
+
+  if (!structureIdFromParams) {
+    return next()
+  }
+
+  if (Number(req.auth.structureId) !== Number(structureIdFromParams)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Cette opération ne vous appartient pas.'
+    })
+  }
+
+  next()
+}

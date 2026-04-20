@@ -11,8 +11,35 @@ function normalizePhone(value) {
   return cleaned ? cleaned.replace(/\s+/g, '') : null
 }
 
-function isValidPin(pin) {
-  return /^\d{4,8}$/.test(String(pin || '').trim())
+function normalizeStructureCode(value) {
+  const cleaned = normalizeString(value)
+  return cleaned ? cleaned.toUpperCase() : null
+}
+
+function isValidPassword(password) {
+  return /^.{4,}$/.test(String(password || '').trim())
+}
+
+function isValidStructureCode(code) {
+  return /^[A-Z0-9_-]{4,20}$/.test(String(code || '').trim())
+}
+
+function sanitizeStructure(structure) {
+  if (!structure) return null
+
+  return {
+    id: structure.id,
+    name: structure.name,
+    structure_code: structure.structure_code,
+    owner_name: structure.owner_name,
+    owner_phone: structure.owner_phone,
+    created_at: structure.created_at,
+    users: structure.users || undefined
+  }
+}
+
+function chiefOwnsStructure(req, structureId) {
+  return Number(req.auth?.structureId) === Number(structureId)
 }
 
 export async function createStructure(req, res, next) {
@@ -21,15 +48,17 @@ export async function createStructure(req, res, next) {
       name,
       owner_name,
       owner_phone,
-      pin_chief,
-      pin_pump
+      owner_password,
+      confirm_password,
+      structure_code
     } = req.body
 
     const cleanName = normalizeString(name)
     const cleanOwnerName = normalizeString(owner_name)
     const cleanOwnerPhone = normalizePhone(owner_phone)
-    const cleanChiefPin = normalizeString(pin_chief)
-    const cleanPumpPin = normalizeString(pin_pump)
+    const cleanOwnerPassword = normalizeString(owner_password)
+    const cleanConfirmPassword = normalizeString(confirm_password)
+    const cleanStructureCode = normalizeStructureCode(structure_code)
 
     if (!cleanName) {
       return res.status(400).json({
@@ -52,70 +81,99 @@ export async function createStructure(req, res, next) {
       })
     }
 
-    if (!cleanChiefPin || !cleanPumpPin) {
+    if (!cleanOwnerPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Les codes PIN chef et pompiste sont obligatoires'
+        message: 'Le mot de passe du chef est obligatoire'
       })
     }
 
-    if (!isValidPin(cleanChiefPin)) {
+    if (!cleanConfirmPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Le code PIN chef doit contenir entre 4 et 8 chiffres'
+        message: 'La confirmation du mot de passe est obligatoire'
       })
     }
 
-    if (!isValidPin(cleanPumpPin)) {
+    if (!cleanStructureCode) {
       return res.status(400).json({
         success: false,
-        message: 'Le code PIN pompiste doit contenir entre 4 et 8 chiffres'
+        message: 'Le code structure est obligatoire'
       })
     }
 
-    if (cleanChiefPin === cleanPumpPin) {
+    if (!isValidPassword(cleanOwnerPassword)) {
       return res.status(400).json({
         success: false,
-        message: 'Le PIN chef et le PIN pompiste doivent être différents'
+        message: 'Le mot de passe doit contenir au moins 4 caractères'
       })
     }
 
-    const { data: existingStructure, error: existingStructureError } = await supabase
+    if (cleanOwnerPassword !== cleanConfirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Les mots de passe ne correspondent pas'
+      })
+    }
+
+    if (!isValidStructureCode(cleanStructureCode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le code structure doit contenir entre 4 et 20 caractères majuscules, chiffres, tirets ou underscores'
+      })
+    }
+
+    const { data: existingStructureByName, error: existingStructureByNameError } = await supabase
       .from('structures')
       .select('id, name')
       .ilike('name', cleanName)
       .maybeSingle()
 
-    if (existingStructureError) throw existingStructureError
+    if (existingStructureByNameError) throw existingStructureByNameError
 
-    if (existingStructure) {
+    if (existingStructureByName) {
       return res.status(409).json({
         success: false,
         message: 'Une structure avec ce nom existe déjà'
       })
     }
 
-    const { data: existingPhoneUser, error: existingPhoneUserError } = await supabase
-      .from('users')
-      .select('id, phone')
-      .eq('phone', cleanOwnerPhone)
+    const { data: existingStructureByCode, error: existingStructureByCodeError } = await supabase
+      .from('structures')
+      .select('id, structure_code')
+      .eq('structure_code', cleanStructureCode)
       .maybeSingle()
 
-    if (existingPhoneUserError) throw existingPhoneUserError
+    if (existingStructureByCodeError) throw existingStructureByCodeError
 
-    if (existingPhoneUser) {
+    if (existingStructureByCode) {
       return res.status(409).json({
         success: false,
-        message: 'Ce numéro est déjà utilisé par un autre utilisateur'
+        message: 'Ce code structure est déjà utilisé'
+      })
+    }
+
+    const { data: existingStructureByPhone, error: existingStructureByPhoneError } = await supabase
+      .from('structures')
+      .select('id, owner_phone')
+      .eq('owner_phone', cleanOwnerPhone)
+      .maybeSingle()
+
+    if (existingStructureByPhoneError) throw existingStructureByPhoneError
+
+    if (existingStructureByPhone) {
+      return res.status(409).json({
+        success: false,
+        message: 'Ce numéro est déjà utilisé par un autre chef'
       })
     }
 
     const structurePayload = {
       name: cleanName,
+      structure_code: cleanStructureCode,
       owner_name: cleanOwnerName,
       owner_phone: cleanOwnerPhone,
-      pin_chief: cleanChiefPin,
-      pin_pump: cleanPumpPin
+      owner_password: cleanOwnerPassword
     }
 
     const { data: structure, error: structureError } = await supabase
@@ -130,27 +188,27 @@ export async function createStructure(req, res, next) {
       structure_id: structure.id,
       name: cleanOwnerName,
       phone: cleanOwnerPhone,
-      password_hash: cleanChiefPin,
-      role: 'chief'
+      role: 'chief',
+      is_active: true
     }
 
-    const { data: chief, error: chiefError } = await supabase
+    const { data: chiefUser, error: chiefUserError } = await supabase
       .from('users')
       .insert([chiefPayload])
       .select()
       .single()
 
-    if (chiefError) {
+    if (chiefUserError) {
       await supabase.from('structures').delete().eq('id', structure.id)
-      throw chiefError
+      throw chiefUserError
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'Structure créée avec succès et chef lié automatiquement',
+      message: 'Compte chef et structure créés avec succès',
       data: {
-        ...structure,
-        chief_user: chief
+        structure: sanitizeStructure(structure),
+        chief_user: chiefUser
       }
     })
   } catch (error) {
@@ -162,11 +220,23 @@ export async function getStructureById(req, res, next) {
   try {
     const { id } = req.params
 
+    if (!chiefOwnsStructure(req, id)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé à cette structure'
+      })
+    }
+
     const { data, error } = await supabase
       .from('structures')
       .select(`
-        *,
-        users(id, name, phone, role, created_at)
+        id,
+        name,
+        structure_code,
+        owner_name,
+        owner_phone,
+        created_at,
+        users(id, name, phone, truck_number, role, pin_code, is_active, created_at)
       `)
       .eq('id', id)
       .single()
@@ -178,12 +248,13 @@ export async function getStructureById(req, res, next) {
           message: 'Structure introuvable'
         })
       }
+
       throw error
     }
 
-    res.json({
+    return res.json({
       success: true,
-      data
+      data: sanitizeStructure(data)
     })
   } catch (error) {
     next(error)
@@ -192,24 +263,19 @@ export async function getStructureById(req, res, next) {
 
 export async function getAllStructures(req, res, next) {
   try {
-    const { search } = req.query
+    const structureId = Number(req.auth?.structureId)
 
-    let query = supabase
+    const { data, error } = await supabase
       .from('structures')
-      .select('*')
+      .select('id, name, structure_code, owner_name, owner_phone, created_at')
+      .eq('id', structureId)
       .order('created_at', { ascending: false })
-
-    if (search) {
-      query = query.ilike('name', `%${String(search).trim()}%`)
-    }
-
-    const { data, error } = await query
 
     if (error) throw error
 
-    res.json({
+    return res.json({
       success: true,
-      data
+      data: (data || []).map(sanitizeStructure)
     })
   } catch (error) {
     next(error)

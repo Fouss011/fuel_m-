@@ -1,15 +1,10 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 
 import HomeScreen from '../screens/HomeScreen'
+import PinAccessScreen from '../screens/PinAccessScreen'
 import DriverDashboardScreen from '../screens/DriverDashboardScreen'
-import NewFuelRequestScreen from '../screens/NewFuelRequestScreen'
 import ChiefDashboardScreen from '../screens/ChiefDashboardScreen'
 import PumpAttendantDashboardScreen from '../screens/PumpAttendantDashboardScreen'
-import RequestDetailsScreen from '../screens/RequestDetailsScreen'
-import ConfirmFuelScreen from '../screens/ConfirmFuelScreen'
-import PinAccessScreen from '../screens/PinAccessScreen'
-import CreateStructureScreen from '../screens/CreateStructureScreen'
-import TeamManagementScreen from '../screens/TeamManagementScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -48,51 +43,21 @@ export default function AppNavigator() {
       />
 
       <Stack.Screen
-        name="DriverDashboard"
-        component={DriverDashboardScreen}
-        options={{ title: 'Espace chauffeur' }}
-      />
-
-      <Stack.Screen
-        name="NewFuelRequest"
-        component={NewFuelRequestScreen}
-        options={{ title: 'Nouvelle demande' }}
-      />
-
-      <Stack.Screen
         name="ChiefDashboard"
         component={ChiefDashboardScreen}
         options={{ title: 'Espace chef' }}
       />
 
       <Stack.Screen
+        name="DriverDashboard"
+        component={DriverDashboardScreen}
+        options={{ title: 'Espace chauffeur' }}
+      />
+
+      <Stack.Screen
         name="PumpAttendantDashboard"
         component={PumpAttendantDashboardScreen}
         options={{ title: 'Espace pompiste' }}
-      />
-
-      <Stack.Screen
-        name="RequestDetails"
-        component={RequestDetailsScreen}
-        options={{ title: 'Détail demande' }}
-      />
-
-      <Stack.Screen
-        name="ConfirmFuel"
-        component={ConfirmFuelScreen}
-        options={{ title: 'Confirmation carburant' }}
-      />
-
-      <Stack.Screen
-        name="CreateStructure"
-        component={CreateStructureScreen}
-        options={{ title: 'Créer une structure' }}
-      />
-
-      <Stack.Screen
-        name="TeamManagement"
-        component={TeamManagementScreen}
-        options={{ title: 'Gestion équipe' }}
       />
     </Stack.Navigator>
   )

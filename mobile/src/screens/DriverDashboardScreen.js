@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -6,332 +6,314 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  ScrollView
+  TextInput,
+  Alert,
+  ActivityIndicator
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { api } from '../api/client'
+import {
+  createFuelRequest,
+  fetchFuelRequests,
+  getStoredSession,
+  clearSession
+} from '../api/client'
 
-const DRIVER_NAME_KEY = 'fuel_app_driver_name'
-const DRIVER_HISTORY_KEY = 'fuel_app_driver_history'
-const DRIVER_STRUCTURE_NAME_KEY = 'fuel_app_structure_name'
-
-const TABS = [
-  { key: 'new', label: 'Nouvelle' },
-  { key: 'pending', label: 'En attente' },
-  { key: 'approved', label: 'Validées' },
-  { key: 'served', label: 'Servies' },
-  { key: 'rejected', label: 'Refusées' }
+const FUEL_OPTIONS = [
+  { key: 'gasoil', label: 'Gasoil' },
+  { key: 'essence', label: 'Essence' }
 ]
 
 export default function DriverDashboardScreen({ navigation }) {
-  const [requests, setRequests] = useState([])
-  const [localName, setLocalName] = useState('')
-  const [structureName, setStructureName] = useState('')
+  const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState('new')
+  const [submitting, setSubmitting] = useState(false)
+  const [requests, setRequests] = useState([])
 
-  useEffect(() => {
-    loadLocalData()
-  }, [])
+  const [fuelType, setFuelType] = useState('gasoil')
+  const [requestedLiters, setRequestedLiters] = useState('')
 
-  async function loadLocalData() {
-    try {
-      const savedName = await AsyncStorage.getItem(DRIVER_NAME_KEY)
-      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
+  useFocusEffect(
+    useCallback(() => {
+      loadDriverData()
+    }, [])
+  )
 
-      if (savedName) setLocalName(savedName)
-      if (savedStructure) setStructureName(savedStructure)
-    } catch (error) {
-      console.log('Erreur lecture données locales chauffeur:', error.message)
-    }
-  }
-
-  async function loadRequests() {
+  async function loadDriverData() {
     try {
       setLoading(true)
 
-      const savedName = await AsyncStorage.getItem(DRIVER_NAME_KEY)
-      const savedStructure = await AsyncStorage.getItem(DRIVER_STRUCTURE_NAME_KEY)
+      const storedSession = await getStoredSession()
 
-      const currentName = savedName || localName
-      const currentStructure = savedStructure || structureName
-
-      if (!currentName) {
-        const localHistoryRaw = await AsyncStorage.getItem(DRIVER_HISTORY_KEY)
-        const localHistory = localHistoryRaw ? JSON.parse(localHistoryRaw) : []
-        setRequests(localHistory)
+      if (!storedSession?.token || storedSession?.role !== 'driver') {
+        Alert.alert('Session expirée', 'Reconnecte-toi comme chauffeur.')
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }]
+        })
         return
       }
 
-      setLocalName(currentName)
-      setStructureName(currentStructure || '')
+      setSession(storedSession)
 
-      const params = new URLSearchParams()
-      params.append('driver_name', currentName)
-
-      if (currentStructure) {
-        params.append('structure_name', currentStructure)
-      }
-
-      const response = await api.get(`/fuel-requests?${params.toString()}`)
-      setRequests(response.data.data || [])
+      const response = await fetchFuelRequests()
+      setRequests(response?.data || [])
     } catch (error) {
-      console.log('Erreur chargement demandes chauffeur:', error?.response?.data || error.message)
-
-      try {
-        const localHistoryRaw = await AsyncStorage.getItem(DRIVER_HISTORY_KEY)
-        const localHistory = localHistoryRaw ? JSON.parse(localHistoryRaw) : []
-        setRequests(localHistory)
-      } catch {
-        setRequests([])
-      }
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible de charger l’espace chauffeur.'
+      Alert.alert('Erreur', message)
     } finally {
       setLoading(false)
     }
   }
 
-  useFocusEffect(
-    useCallback(() => {
-      loadRequests()
-    }, [localName, structureName])
-  )
+  async function handleCreateRequest() {
+    if (!requestedLiters.trim()) {
+      Alert.alert('Champ manquant', 'Entre la quantité demandée.')
+      return
+    }
 
-  function renderStatus(status) {
-    switch (status) {
-      case 'pending':
-        return { label: 'En attente', color: '#C2410C', bg: '#FFEDD5' }
-      case 'approved':
-        return { label: 'Validée', color: '#047857', bg: '#D1FAE5' }
-      case 'rejected':
-        return { label: 'Refusée', color: '#B91C1C', bg: '#FEE2E2' }
-      case 'served':
-        return { label: 'Servie', color: '#1D4ED8', bg: '#DBEAFE' }
-      default:
-        return { label: status || 'Inconnu', color: '#475569', bg: '#E2E8F0' }
+    const liters = Number(requestedLiters)
+
+    if (Number.isNaN(liters) || liters <= 0) {
+      Alert.alert('Valeur invalide', 'La quantité doit être supérieure à 0.')
+      return
+    }
+
+    try {
+      setSubmitting(true)
+
+      await createFuelRequest({
+        fuel_type: fuelType,
+        requested_liters: liters
+      })
+
+      Alert.alert('Succès', 'Demande envoyée avec succès.')
+      setRequestedLiters('')
+      await loadDriverData()
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible d’envoyer la demande.'
+      Alert.alert('Erreur', message)
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const counts = useMemo(() => {
-    return {
-      pending: requests.filter((r) => r.status === 'pending').length,
-      approved: requests.filter((r) => r.status === 'approved').length,
-      served: requests.filter((r) => r.status === 'served').length,
-      rejected: requests.filter((r) => r.status === 'rejected').length
-    }
-  }, [requests])
-
-  const filteredRequests = useMemo(() => {
-    if (activeTab === 'new') return []
-    return requests.filter((item) => item.status === activeTab)
-  }, [requests, activeTab])
-
-  function getTabCount(tabKey) {
-    if (tabKey === 'new') return null
-    return counts[tabKey] || 0
-  }
-
-  function renderHeader() {
-    return (
-      <>
-        <View style={styles.heroCard}>
-          <View style={styles.heroTop}>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>CHAUFFEUR</Text>
-            </View>
-
-            <View style={styles.heroMiniCard}>
-              <Text style={styles.heroMiniValue}>{requests.length}</Text>
-              <Text style={styles.heroMiniLabel}>Total</Text>
-            </View>
-          </View>
-
-          <Text style={styles.heroTitle}>Espace chauffeur</Text>
-          <Text style={styles.heroText}>
-            {localName ? `Nom enregistré : ${localName}` : 'Aucun nom enregistré pour le moment'}
-          </Text>
-
-          <View style={styles.structureBox}>
-            <Text style={styles.structureLabel}>Structure</Text>
-            <Text style={styles.structureValue}>
-              {structureName || 'Non renseignée pour le moment'}
-            </Text>
-          </View>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsRow}
-          style={styles.tabsScroll}
-        >
-          {TABS.map((tab) => {
-            const active = activeTab === tab.key
-            const count = getTabCount(tab.key)
-
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={[styles.tab, active && styles.tabActive]}
-                onPress={() => setActiveTab(tab.key)}
-                activeOpacity={0.9}
-              >
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                  {tab.label}
-                </Text>
-
-                {count !== null ? (
-                  <View style={[styles.tabCount, active && styles.tabCountActive]}>
-                    <Text
-                      style={[
-                        styles.tabCountText,
-                        active && styles.tabCountTextActive
-                      ]}
-                    >
-                      {count}
-                    </Text>
-                  </View>
-                ) : null}
-              </TouchableOpacity>
-            )
-          })}
-        </ScrollView>
-
-        {activeTab === 'new' ? (
-          <View style={styles.newRequestCard}>
-            <Text style={styles.newRequestTitle}>Créer une nouvelle demande</Text>
-            <Text style={styles.newRequestText}>
-              Lance une nouvelle demande de carburant pour ton camion dans ton espace de travail.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => navigation.navigate('NewFuelRequest')}
-              activeOpacity={0.9}
-            >
-              <Text style={styles.primaryButtonText}>+ Nouvelle demande</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.sectionRow}>
-            <Text style={styles.sectionTitle}>
-              {TABS.find((t) => t.key === activeTab)?.label}
-            </Text>
-            <Text style={styles.sectionSubtitle}>
-              {filteredRequests.length} élément{filteredRequests.length > 1 ? 's' : ''}
-            </Text>
-          </View>
-        )}
-      </>
+  async function handleLogout() {
+    Alert.alert(
+      'Déconnexion',
+      'Veux-tu vraiment quitter la session chauffeur ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Se déconnecter',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearSession()
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Home' }]
+              })
+            } catch (error) {
+              Alert.alert('Erreur', 'Impossible de se déconnecter.')
+            }
+          }
+        }
+      ]
     )
   }
 
-  function renderEmpty() {
-    if (activeTab === 'new') return <View />
+  const stats = useMemo(() => {
+    const total = requests.length
+    const pending = requests.filter((item) => item.status === 'pending').length
+    const approved = requests.filter((item) => item.status === 'approved').length
+    const served = requests.filter((item) => item.status === 'served').length
+    const rejected = requests.filter((item) => item.status === 'rejected').length
 
-    const titles = {
-      pending: 'Aucune demande en attente',
-      approved: 'Aucune demande validée',
-      served: 'Aucune demande servie',
-      rejected: 'Aucune demande refusée'
-    }
+    return { total, pending, approved, served, rejected }
+  }, [requests])
+
+  function renderFuelOption(option) {
+    const isActive = fuelType === option.key
 
     return (
-      <View style={styles.emptyBox}>
-        <Text style={styles.emptyIcon}>📭</Text>
-        <Text style={styles.emptyTitle}>{titles[activeTab] || 'Aucune demande'}</Text>
-        <Text style={styles.emptyText}>
-          Les éléments de cette catégorie apparaîtront ici.
+      <TouchableOpacity
+        key={option.key}
+        style={[styles.optionChip, isActive && styles.optionChipActive]}
+        onPress={() => setFuelType(option.key)}
+      >
+        <Text style={[styles.optionChipText, isActive && styles.optionChipTextActive]}>
+          {option.label}
         </Text>
+      </TouchableOpacity>
+    )
+  }
+
+  function renderRequestItem({ item }) {
+    return (
+      <View style={styles.requestCard}>
+        <View style={styles.requestHeader}>
+          <View>
+            <Text style={styles.requestTitle}>{item.fuel_type}</Text>
+            <Text style={styles.requestTruck}>{item.truck_number}</Text>
+          </View>
+
+          <View style={[styles.statusBadge, statusStyle(item.status)]}>
+            <Text style={styles.statusBadgeText}>{statusLabel(item.status)}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.requestMeta}>Demandé : {item.requested_liters} L</Text>
+
+        {item.approved_liters ? (
+          <Text style={styles.requestMeta}>Validé : {item.approved_liters} L</Text>
+        ) : null}
+
+        {item.served_liters ? (
+          <Text style={styles.requestMeta}>Servi : {item.served_liters} L</Text>
+        ) : null}
+
+        {item.amount ? (
+          <Text style={styles.requestMeta}>Montant : {item.amount}</Text>
+        ) : null}
+
+        {item.created_at ? (
+          <Text style={styles.requestDate}>
+            Créé le : {new Date(item.created_at).toLocaleString()}
+          </Text>
+        ) : null}
       </View>
     )
   }
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={activeTab === 'new' ? [] : filteredRequests}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={({ item }) => {
-          const status = renderStatus(item.status)
+    <FlatList
+      data={requests}
+      keyExtractor={(item) => String(item.id)}
+      renderItem={renderRequestItem}
+      refreshControl={
+        <RefreshControl refreshing={loading} onRefresh={loadDriverData} />
+      }
+      ListHeaderComponent={
+        <View style={styles.headerContainer}>
+          <View style={styles.heroCard}>
+            <View>
+              <Text style={styles.heroTitle}>
+                {session?.userName || 'Espace chauffeur'}
+              </Text>
+              <Text style={styles.heroSubtitle}>
+                {session?.structureName || 'Structure'} •{' '}
+                {session?.truckNumber || 'Camion non renseigné'}
+              </Text>
+            </View>
 
-          return (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() => navigation.navigate('RequestDetails', { requestId: item.id })}
-              activeOpacity={0.94}
-            >
-              <View style={styles.cardHeader}>
-                <View style={styles.cardHeaderLeft}>
-                  <Text style={styles.truck}>{item.truck_number}</Text>
-                  <Text style={styles.meta}>
-                    {item.driver_name || item.driver?.name || 'N/A'}
-                  </Text>
-                </View>
-
-                <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-                  <Text style={[styles.statusText, { color: status.color }]}>
-                    {status.label}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.infoGrid}>
-                <View style={styles.infoBlock}>
-                  <Text style={styles.infoLabel}>Carburant</Text>
-                  <Text style={styles.infoValue}>{item.fuel_type}</Text>
-                </View>
-
-                <View style={styles.infoBlock}>
-                  <Text style={styles.infoLabel}>Demandé</Text>
-                  <Text style={styles.infoValue}>{item.requested_liters} L</Text>
-                </View>
-
-                <View style={styles.infoBlock}>
-                  <Text style={styles.infoLabel}>Validé</Text>
-                  <Text style={styles.infoValue}>
-                    {item.approved_liters ? `${item.approved_liters} L` : '—'}
-                  </Text>
-                </View>
-
-                <View style={styles.infoBlock}>
-                  <Text style={styles.infoLabel}>Servi</Text>
-                  <Text style={styles.infoValue}>
-                    {item.served_liters ? `${item.served_liters} L` : '—'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.cardBottomMeta}>
-                <Text style={styles.structureMetaLabel}>Structure</Text>
-                <Text style={styles.structureMetaValue}>
-                  {item.structure_name || '—'}
-                </Text>
-              </View>
-
-              <View style={styles.footerRow}>
-                <View>
-                  <Text style={styles.amountLabel}>Montant</Text>
-                  <Text style={styles.amountValue}>
-                    {item.amount ? `${item.amount} FCFA` : '—'}
-                  </Text>
-                </View>
-
-                <Text style={styles.detailsLink}>Voir détail ›</Text>
-              </View>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Text style={styles.logoutButtonText}>Déconnexion</Text>
             </TouchableOpacity>
-          )
-        }}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={loadRequests} />
-        }
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={true}
-      />
+          </View>
+
+          <View style={styles.statsGrid}>
+            <StatCard label="Total" value={stats.total} />
+            <StatCard label="En attente" value={stats.pending} />
+            <StatCard label="Validées" value={stats.approved} />
+            <StatCard label="Servies" value={stats.served} />
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Nouvelle demande</Text>
+            <Text style={styles.sectionSubtitle}>
+              Envoie une demande à ton chef depuis ton espace.
+            </Text>
+
+            <View style={styles.optionsRow}>
+              {FUEL_OPTIONS.map(renderFuelOption)}
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Quantité demandée en litres"
+              value={requestedLiters}
+              onChangeText={setRequestedLiters}
+              keyboardType="numeric"
+            />
+
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleCreateRequest}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Envoyer la demande</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Mes demandes</Text>
+            <Text style={styles.sectionSubtitle}>
+              Tu vois ici uniquement les demandes envoyées depuis ton profil.
+            </Text>
+          </View>
+        </View>
+      }
+      ListEmptyComponent={
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>Aucune demande pour le moment</Text>
+          <Text style={styles.emptyText}>
+            Crée ta première demande de carburant pour qu’elle apparaisse ici.
+          </Text>
+        </View>
+      }
+      contentContainerStyle={styles.listContent}
+      style={styles.container}
+    />
+  )
+}
+
+function StatCard({ label, value }) {
+  return (
+    <View style={styles.statCard}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
     </View>
   )
+}
+
+function statusLabel(status) {
+  switch (status) {
+    case 'pending':
+      return 'En attente'
+    case 'approved':
+      return 'Validée'
+    case 'served':
+      return 'Servie'
+    case 'rejected':
+      return 'Refusée'
+    default:
+      return status
+  }
+}
+
+function statusStyle(status) {
+  switch (status) {
+    case 'pending':
+      return { backgroundColor: '#FEF3C7' }
+    case 'approved':
+      return { backgroundColor: '#DBEAFE' }
+    case 'served':
+      return { backgroundColor: '#DCFCE7' }
+    case 'rejected':
+      return { backgroundColor: '#FEE2E2' }
+    default:
+      return { backgroundColor: '#E5E7EB' }
+  }
 }
 
 const styles = StyleSheet.create({
@@ -341,297 +323,185 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingBottom: 32,
-    flexGrow: 1
+    paddingBottom: 40
+  },
+  headerContainer: {
+    paddingBottom: 8
   },
   heroCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     borderRadius: 24,
     padding: 20,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
+    marginBottom: 16
   },
-  heroTop: {
+  heroTitle: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 6
+  },
+  heroSubtitle: {
+    color: '#D9E4F1',
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 14
+  },
+  logoutButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800'
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 16
+  },
+  statCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 12
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#2563EB',
+    marginBottom: 4
+  },
+  statLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '700'
+  },
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 16
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#081B33',
+    marginBottom: 8
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#64748B',
+    marginBottom: 12
+  },
+  optionsRow: {
+    flexDirection: 'row',
+    marginBottom: 12
+  },
+  optionChip: {
+    backgroundColor: '#EEF3F8',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    marginRight: 10
+  },
+  optionChipActive: {
+    backgroundColor: '#2563EB'
+  },
+  optionChipText: {
+    color: '#516173',
+    fontWeight: '700'
+  },
+  optionChipTextActive: {
+    color: '#FFFFFF'
+  },
+  input: {
+    backgroundColor: '#F6F9FC',
+    borderWidth: 1,
+    borderColor: '#DFE7F0',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#081B33',
+    marginBottom: 12
+  },
+  primaryButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800'
+  },
+  requestCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 14
+  },
+  requestHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12
   },
-  roleBadge: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6
-  },
-  roleBadgeText: {
-    color: '#1D4ED8',
-    fontSize: 11,
+  requestTitle: {
+    fontSize: 17,
     fontWeight: '900',
-    letterSpacing: 0.5
+    color: '#081B33',
+    textTransform: 'capitalize'
   },
-  heroMiniCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignItems: 'center',
-    minWidth: 88
+  requestTruck: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#64748B'
   },
-  heroMiniValue: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#0F172A'
-  },
-  heroMiniLabel: {
-    color: '#64748B',
-    fontSize: 12,
-    marginTop: 2
-  },
-  heroTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#0F172A',
-    marginBottom: 6
-  },
-  heroText: {
-    color: '#475569',
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 14
-  },
-  structureBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  structureLabel: {
-    color: '#64748B',
-    fontSize: 12,
-    marginBottom: 4
-  },
-  structureValue: {
-    color: '#0F172A',
-    fontSize: 15,
-    fontWeight: '800'
-  },
-  tabsScroll: {
-    marginBottom: 16
-  },
-  tabsRow: {
-    paddingRight: 8
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    marginRight: 8
-  },
-  tabActive: {
-    backgroundColor: '#081B33'
-  },
-  tabText: {
-    color: '#0F172A',
-    fontWeight: '800',
-    fontSize: 13
-  },
-  tabTextActive: {
-    color: '#FFFFFF'
-  },
-  tabCount: {
-    marginLeft: 8,
-    minWidth: 22,
-    height: 22,
-    borderRadius: 999,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6
-  },
-  tabCountActive: {
-    backgroundColor: 'rgba(255,255,255,0.18)'
-  },
-  tabCountText: {
-    color: '#0F172A',
-    fontWeight: '900',
-    fontSize: 11
-  },
-  tabCountTextActive: {
-    color: '#FFFFFF'
-  },
-  newRequestCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  newRequestTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#0F172A',
-    marginBottom: 6
-  },
-  newRequestText: {
-    color: '#64748B',
+  requestMeta: {
     fontSize: 14,
-    lineHeight: 21,
-    marginBottom: 18
+    color: '#374151',
+    marginBottom: 5
   },
-  primaryButton: {
-    backgroundColor: '#081B33',
-    borderRadius: 18,
-    paddingVertical: 18,
-    alignItems: 'center'
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '900',
-    fontSize: 17
-  },
-  sectionRow: {
-    marginBottom: 14
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#0F172A',
-    marginBottom: 4
-  },
-  sectionSubtitle: {
-    color: '#64748B',
-    fontSize: 14
-  },
-  emptyBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 28,
-    alignItems: 'center',
+  requestDate: {
     marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  emptyIcon: {
-    fontSize: 30,
-    marginBottom: 10
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#0F172A',
-    marginBottom: 6
-  },
-  emptyText: {
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 20
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 18
-  },
-  cardHeaderLeft: {
-    flex: 1,
-    paddingRight: 12
-  },
-  truck: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#0F172A'
-  },
-  meta: {
-    marginTop: 6,
-    color: '#64748B',
-    fontSize: 15
+    fontSize: 12,
+    color: '#64748B'
   },
   statusBadge: {
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8
   },
-  statusText: {
+  statusBadgeText: {
     fontSize: 12,
-    fontWeight: '900'
+    fontWeight: '800',
+    color: '#1F2937'
   },
-  infoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between'
-  },
-  infoBlock: {
-    width: '48.5%',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 10
-  },
-  infoLabel: {
-    color: '#64748B',
-    fontSize: 12,
-    marginBottom: 5
-  },
-  infoValue: {
-    color: '#0F172A',
-    fontSize: 18,
-    fontWeight: '800'
-  },
-  cardBottomMeta: {
-    marginTop: 2,
-    marginBottom: 10,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
-  structureMetaLabel: {
-    color: '#64748B',
-    fontSize: 12,
-    marginBottom: 4
-  },
-  structureMetaValue: {
-    color: '#0F172A',
-    fontSize: 14,
-    fontWeight: '800'
-  },
-  footerRow: {
-    marginTop: 10,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  emptyWrap: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 20,
     alignItems: 'center'
   },
-  amountLabel: {
-    color: '#64748B',
-    fontSize: 13,
-    marginBottom: 2
-  },
-  amountValue: {
-    color: '#0F172A',
+  emptyTitle: {
     fontSize: 17,
-    fontWeight: '900'
+    fontWeight: '900',
+    color: '#081B33',
+    marginBottom: 8
   },
-  detailsLink: {
-    color: '#1D4ED8',
-    fontWeight: '800',
-    fontSize: 13
+  emptyText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 21
   }
 })

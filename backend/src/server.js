@@ -3,13 +3,12 @@ import cors from 'cors'
 import morgan from 'morgan'
 import dotenv from 'dotenv'
 
+import authRoutes from './routes/authRoutes.js'
 import fuelRequestRoutes from './routes/fuelRequestRoutes.js'
 import structureRoutes from './routes/structureRoutes.js'
 import userRoutes from './routes/userRoutes.js'
-import authRoutes from './routes/authRoutes.js'
 import { notFound } from './middleware/notFound.js'
 import { errorHandler } from './middleware/errorHandler.js'
-import { attachSession } from './middleware/authSession.js'
 
 dotenv.config()
 
@@ -26,12 +25,11 @@ app.use(
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(morgan('dev'))
-app.use(attachSession)
 
 app.use((req, res, next) => {
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-session-token, x-user-role, x-user-id, x-user-name, x-structure-id, x-structure-name'
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
   )
   next()
 })
@@ -40,7 +38,7 @@ app.get('/', (req, res) => {
   res.json({
     success: true,
     message: 'API Fuel Management en ligne',
-    version: '2.0.0'
+    version: '3.0.0'
   })
 })
 
@@ -48,9 +46,10 @@ app.get('/api', (req, res) => {
   res.json({
     success: true,
     message: 'Bienvenue sur l’API Gestion Carburant',
-    version: '2.0.0',
+    version: '3.0.0',
     routes: {
       health: '/api/health',
+      auth: '/api/auth',
       fuelRequests: '/api/fuel-requests',
       structures: '/api/structures',
       users: '/api/users'

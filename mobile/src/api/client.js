@@ -1,202 +1,177 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import axios from 'axios'
 
-const BASE_URL = 'https://backend-withered-sky-4709.fly.dev/api'
+const SESSION_STORAGE_KEY = 'fuel_management_session'
 
-const STORAGE_KEYS = {
-  token: 'session_token',
-  expiresAt: 'session_expires_at',
-  role: 'user_role',
-  userId: 'user_id',
-  userName: 'user_name',
-  structureId: 'structure_id',
-  structureName: 'structure_name'
-}
+const BASE_URL =
+  'https://backend-withered-sky-4709.fly.dev/api'
 
-async function getSessionHeaders() {
-  const [
-    token,
-    role,
-    userId,
-    userName,
-    structureId,
-    structureName
-  ] = await Promise.all([
-    AsyncStorage.getItem(STORAGE_KEYS.token),
-    AsyncStorage.getItem(STORAGE_KEYS.role),
-    AsyncStorage.getItem(STORAGE_KEYS.userId),
-    AsyncStorage.getItem(STORAGE_KEYS.userName),
-    AsyncStorage.getItem(STORAGE_KEYS.structureId),
-    AsyncStorage.getItem(STORAGE_KEYS.structureName)
-  ])
-
-  return {
-    ...(token ? { 'x-session-token': token } : {}),
-    ...(role ? { 'x-user-role': role } : {}),
-    ...(userId ? { 'x-user-id': userId } : {}),
-    ...(userName ? { 'x-user-name': userName } : {}),
-    ...(structureId ? { 'x-structure-id': structureId } : {}),
-    ...(structureName ? { 'x-structure-name': structureName } : {})
+export const api = axios.create({
+  baseURL: BASE_URL,
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json'
   }
-}
+})
 
-async function parseResponse(response) {
-  const text = await response.text()
-
-  let data = null
+export async function getStoredSession() {
   try {
-    data = text ? JSON.parse(text) : null
-  } catch {
-    data = { success: false, message: text || 'Réponse serveur illisible.' }
-  }
+    const raw = await AsyncStorage.getItem(SESSION_STORAGE_KEY)
+    if (!raw) return null
 
-  if (!response.ok) {
-    const error = new Error(
-      data?.message || 'Une erreur est survenue lors de la communication avec le serveur.'
-    )
-    error.status = response.status
-    error.code = data?.code || null
-    error.data = data
-    throw error
-  }
+    const parsed = JSON.parse(raw)
 
-  return data
-}
-
-async function request(path, options = {}) {
-  const headers = await getSessionHeaders()
-
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...headers,
-      ...(options.headers || {})
+    if (!parsed?.token || !parsed?.role) {
+      return null
     }
-  })
 
-  return parseResponse(response)
-}
-
-export const api = {
-  async pinLogin({ role, structure_id, pin }) {
-    return request('/auth/pin-login', {
-      method: 'POST',
-      body: JSON.stringify({ role, structure_id, pin })
-    })
-  },
-
-  async getCurrentSession() {
-    return request('/auth/me', {
-      method: 'GET'
-    })
-  },
-
-  async getFuelRequests(params = {}) {
-    const query = new URLSearchParams()
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        query.append(key, value)
-      }
-    })
-
-    const suffix = query.toString() ? `?${query.toString()}` : ''
-    return request(`/fuel-requests${suffix}`, {
-      method: 'GET'
-    })
-  },
-
-  async getFuelRequestById(id) {
-    return request(`/fuel-requests/${id}`, {
-      method: 'GET'
-    })
-  },
-
-  async createFuelRequest(payload) {
-    return request('/fuel-requests', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    })
-  },
-
-  async approveFuelRequest(id, payload = {}) {
-    return request(`/fuel-requests/${id}/approve`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload)
-    })
-  },
-
-  async rejectFuelRequest(id, payload = {}) {
-    return request(`/fuel-requests/${id}/reject`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload)
-    })
-  },
-
-  async serveFuelRequest(id, payload = {}) {
-    return request(`/fuel-requests/${id}/serve`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload)
-    })
-  },
-
-  async getStructures() {
-    return request('/structures', {
-      method: 'GET'
-    })
-  },
-
-  async getUsers(params = {}) {
-    const query = new URLSearchParams()
-
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        query.append(key, value)
-      }
-    })
-
-    const suffix = query.toString() ? `?${query.toString()}` : ''
-    return request(`/users${suffix}`, {
-      method: 'GET'
-    })
+    return parsed
+  } catch (error) {
+    console.log('Erreur lecture session:', error?.message || error)
+    return null
   }
 }
 
-export async function saveSession(loginResponse) {
-  const token = loginResponse?.data?.token
-  const expiresAt = loginResponse?.data?.expires_at
-  const session = loginResponse?.data?.session
-
-  if (!token || !session) {
-    throw new Error('Session invalide renvoyée par le serveur.')
-  }
-
-  await AsyncStorage.multiSet([
-    [STORAGE_KEYS.token, String(token)],
-    [STORAGE_KEYS.expiresAt, String(expiresAt || '')],
-    [STORAGE_KEYS.role, String(session.role || '')],
-    [STORAGE_KEYS.userId, String(session.userId || '')],
-    [STORAGE_KEYS.userName, String(session.userName || '')],
-    [STORAGE_KEYS.structureId, String(session.structureId || '')],
-    [STORAGE_KEYS.structureName, String(session.structureName || '')]
-  ])
+export async function setStoredSession(session) {
+  await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
 }
 
 export async function clearSession() {
-  await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS))
+  await AsyncStorage.removeItem(SESSION_STORAGE_KEY)
 }
 
-export async function getStoredSession() {
-  const entries = await AsyncStorage.multiGet(Object.values(STORAGE_KEYS))
-  const map = Object.fromEntries(entries)
+export async function getAuthHeaders() {
+  const session = await getStoredSession()
+
+  if (!session?.token) {
+    return {}
+  }
 
   return {
-    token: map[STORAGE_KEYS.token] || null,
-    expiresAt: map[STORAGE_KEYS.expiresAt] || null,
-    role: map[STORAGE_KEYS.role] || null,
-    userId: map[STORAGE_KEYS.userId] || null,
-    userName: map[STORAGE_KEYS.userName] || null,
-    structureId: map[STORAGE_KEYS.structureId] || null,
-    structureName: map[STORAGE_KEYS.structureName] || null
+    Authorization: `Bearer ${session.token}`
   }
 }
+
+api.interceptors.request.use(
+  async (config) => {
+    const session = await getStoredSession()
+
+    if (session?.token) {
+      config.headers = config.headers || {}
+      config.headers.Authorization = `Bearer ${session.token}`
+    }
+
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const status = error?.response?.status
+
+    if (status === 401) {
+      try {
+        await clearSession()
+      } catch (storageError) {
+        console.log('Erreur suppression session:', storageError?.message || storageError)
+      }
+    }
+
+    return Promise.reject(error)
+  }
+)
+
+export async function fetchCurrentSession() {
+  const response = await api.get('/auth/me')
+  return response.data
+}
+
+export async function createChiefStructure(payload) {
+  const response = await api.post('/structures', payload)
+  return response.data
+}
+
+export async function loginChief(payload) {
+  const response = await api.post('/auth/chief-login', payload)
+  return response.data
+}
+
+export async function loadStructureUsers(structureCode, role) {
+  const response = await api.get(
+    `/auth/structure-users/${String(structureCode).trim().toUpperCase()}?role=${role}`
+  )
+  return response.data
+}
+
+export async function accessDriver(payload) {
+  const response = await api.post('/auth/driver-access', payload)
+  return response.data
+}
+
+export async function accessPumpAttendant(payload) {
+  const response = await api.post('/auth/pump-access', payload)
+  return response.data
+}
+
+export async function fetchFuelRequests(status) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  const response = await api.get(`/fuel-requests${query}`)
+  return response.data
+}
+
+export async function fetchFuelRequestById(id) {
+  const response = await api.get(`/fuel-requests/${id}`)
+  return response.data
+}
+
+export async function createFuelRequest(payload) {
+  const response = await api.post('/fuel-requests', payload)
+  return response.data
+}
+
+export async function approveFuelRequest(id, approved_liters) {
+  const response = await api.patch(`/fuel-requests/${id}/approve`, {
+    approved_liters
+  })
+  return response.data
+}
+
+export async function rejectFuelRequest(id) {
+  const response = await api.patch(`/fuel-requests/${id}/reject`)
+  return response.data
+}
+
+export async function serveFuelRequest(id, payload) {
+  const response = await api.patch(`/fuel-requests/${id}/serve`, payload)
+  return response.data
+}
+
+export async function fetchStructureUsers(structureId, role) {
+  const query = role ? `?role=${encodeURIComponent(role)}` : ''
+  const response = await api.get(`/users/structure/${structureId}${query}`)
+  return response.data
+}
+
+export async function createDriverUser(payload) {
+  const response = await api.post('/users/drivers', payload)
+  return response.data
+}
+
+export async function createPumpAttendantUser(payload) {
+  const response = await api.post('/users/pump-attendants', payload)
+  return response.data
+}
+
+export async function updateUser(id, payload) {
+  const response = await api.patch(`/users/${id}`, payload)
+  return response.data
+}
+
+export async function deactivateUser(id) {
+  const response = await api.patch(`/users/${id}/deactivate`)
+  return response.data
+}
+
+export default api

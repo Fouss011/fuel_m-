@@ -2,206 +2,573 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ScrollView,
   ActivityIndicator,
-  TextInput
+  Alert
 } from 'react-native'
-import { api, saveSession } from '../api/client'
+import { api, setStoredSession } from '../api/client'
+
+function roleLabel(role) {
+  if (role === 'chief') return 'Chef'
+  if (role === 'driver') return 'Chauffeur'
+  if (role === 'pump_attendant') return 'Pompiste'
+  return 'Accès'
+}
 
 export default function PinAccessScreen({ route, navigation }) {
-  const rawRole = route?.params?.role || 'chief'
-  const normalizedRole = rawRole === 'pump' ? 'pump_attendant' : rawRole
+  const role = route?.params?.role || 'driver'
 
-  const [pin, setPin] = useState('')
-  const [structures, setStructures] = useState([])
-  const [selectedStructureId, setSelectedStructureId] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
+  const [mode, setMode] = useState(role === 'chief' ? 'login' : 'structure')
 
-  const isChief = normalizedRole === 'chief'
-  const title = isChief ? 'Connexion chef' : 'Connexion pompiste'
-  const subtitle = isChief
-    ? 'Choisis une structure déjà créée puis entre le code PIN chef.'
-    : 'Choisis une structure puis entre le code PIN pompiste.'
-  const targetScreen = isChief ? 'ChiefDashboard' : 'PumpAttendantDashboard'
-  const badgeLabel = isChief ? 'CHEF' : 'POMPISTE'
-  const badgeStyle = isChief ? styles.badgeChief : styles.badgePump
-  const badgeTextStyle = isChief ? styles.badgeChiefText : styles.badgePumpText
+  const [loading, setLoading] = useState(false)
+  const [loadingUsers, setLoadingUsers] = useState(false)
 
-  const selectedStructure = useMemo(() => {
-    return structures.find((item) => String(item.id) === String(selectedStructureId)) || null
-  }, [structures, selectedStructureId])
+  const [structureCode, setStructureCode] = useState('')
+  const [availableUsers, setAvailableUsers] = useState([])
+  const [selectedUserId, setSelectedUserId] = useState(null)
+  const [selectedUserName, setSelectedUserName] = useState('')
+  const [selectedUserPin, setSelectedUserPin] = useState('')
+
+  const [chiefPhone, setChiefPhone] = useState('')
+  const [chiefPassword, setChiefPassword] = useState('')
+
+  const [createName, setCreateName] = useState('')
+  const [createOwnerName, setCreateOwnerName] = useState('')
+  const [createPhone, setCreatePhone] = useState('')
+  const [createPassword, setCreatePassword] = useState('')
+  const [createConfirmPassword, setCreateConfirmPassword] = useState('')
+  const [createStructureCode, setCreateStructureCode] = useState('')
 
   useEffect(() => {
-    initialize()
-  }, [])
+    if (role === 'chief') {
+      setMode('login')
+    } else {
+      setMode('structure')
+    }
+  }, [role])
 
-  async function initialize() {
+  const screenConfig = useMemo(() => {
+    if (role === 'chief') {
+      return {
+        title: 'Espace chef',
+        subtitle:
+          'Connecte-toi à ta structure ou crée ton compte pour démarrer.',
+        accent: '#0F766E',
+        badge: 'CHEF'
+      }
+    }
+
+    if (role === 'pump_attendant') {
+      return {
+        title: 'Accès pompiste',
+        subtitle:
+          'Entre le code structure, choisis ton profil puis confirme ton accès.',
+        accent: '#B45309',
+        badge: 'POMPISTE'
+      }
+    }
+
+    return {
+      title: 'Accès chauffeur',
+      subtitle:
+        'Entre le code structure puis choisis ton nom pour accéder à ta page.',
+      accent: '#2563EB',
+      badge: 'CHAUFFEUR'
+    }
+  }, [role])
+
+  function resetStructureFlow() {
+    setAvailableUsers([])
+    setSelectedUserId(null)
+    setSelectedUserName('')
+    setSelectedUserPin('')
+  }
+
+  async function handleChiefLogin() {
+    if (!chiefPhone.trim()) {
+      Alert.alert('Champ manquant', 'Entre le numéro du chef.')
+      return
+    }
+
+    if (!chiefPassword.trim()) {
+      Alert.alert('Champ manquant', 'Entre le mot de passe.')
+      return
+    }
+
     try {
       setLoading(true)
 
-      const structuresResponse = await api.getStructures()
-      const allStructures = structuresResponse?.data || []
+      const response = await api.post('/auth/chief-login', {
+        phone: chiefPhone.trim(),
+        password: chiefPassword.trim()
+      })
 
-      setStructures(allStructures)
+      const payload = response?.data?.data
 
-      if (allStructures.length > 0) {
-        setSelectedStructureId(allStructures[0].id)
+      if (!payload?.token || !payload?.session) {
+        throw new Error('Réponse de connexion invalide')
       }
+
+      await setStoredSession({
+        token: payload.token,
+        role: payload.session.role,
+        userId: payload.session.userId,
+        userName: payload.session.userName,
+        structureId: payload.session.structureId,
+        structureName: payload.session.structureName,
+        structureCode: payload.session.structureCode,
+        expiresAt: payload.expires_at
+      })
+
+      Alert.alert('Connexion réussie', 'Bienvenue dans ton espace chef.')
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'ChiefDashboard' }]
+      })
     } catch (error) {
-      console.log('Erreur init accès pin:', error?.data || error?.message || error)
-      Alert.alert(
-        'Erreur',
-        error?.message || 'Impossible de charger les structures.'
-      )
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible de se connecter pour le moment.'
+      Alert.alert('Connexion impossible', message)
     } finally {
       setLoading(false)
     }
   }
 
-  function handleSelectStructure(structure) {
-    setSelectedStructureId(structure.id)
-  }
-
-  async function handleValidate() {
-    const cleanPin = pin.trim()
-
-    if (!selectedStructure) {
-      Alert.alert(
-        'Structure requise',
-        'Sélectionne d’abord une structure avant de continuer.'
-      )
+  async function handleChiefCreateAccount() {
+    if (!createName.trim()) {
+      Alert.alert('Champ manquant', 'Entre le nom de la structure.')
       return
     }
 
-    if (!cleanPin) {
-      Alert.alert(
-        'Code PIN requis',
-        'Entre le code PIN pour continuer.'
-      )
+    if (!createOwnerName.trim()) {
+      Alert.alert('Champ manquant', 'Entre le nom du chef.')
       return
     }
 
-    if (cleanPin.length < 3) {
-      Alert.alert(
-        'Code PIN invalide',
-        'Le code PIN saisi est trop court. Vérifie puis réessaie.'
-      )
+    if (!createPhone.trim()) {
+      Alert.alert('Champ manquant', 'Entre le numéro du chef.')
+      return
+    }
+
+    if (!createPassword.trim()) {
+      Alert.alert('Champ manquant', 'Entre le mot de passe.')
+      return
+    }
+
+    if (!createConfirmPassword.trim()) {
+      Alert.alert('Champ manquant', 'Confirme le mot de passe.')
+      return
+    }
+
+    if (!createStructureCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code structure.')
       return
     }
 
     try {
-      setSubmitting(true)
+      setLoading(true)
 
-      const loginResponse = await api.pinLogin({
-        role: normalizedRole,
-        structure_id: selectedStructure.id,
-        pin: cleanPin
+      await api.post('/structures', {
+        name: createName.trim(),
+        owner_name: createOwnerName.trim(),
+        owner_phone: createPhone.trim(),
+        owner_password: createPassword.trim(),
+        confirm_password: createConfirmPassword.trim(),
+        structure_code: createStructureCode.trim().toUpperCase()
       })
 
-      await saveSession(loginResponse)
-
       Alert.alert(
-        'Connexion réussie',
-        loginResponse?.message || 'Session ouverte avec succès.',
-        [
-          {
-            text: 'Continuer',
-            onPress: () => navigation.replace(targetScreen)
-          }
-        ]
+        'Compte créé',
+        'Le compte chef et la structure ont été créés. Connecte-toi maintenant.'
       )
+
+      setChiefPhone(createPhone.trim())
+      setChiefPassword(createPassword.trim())
+      setMode('login')
     } catch (error) {
-      console.log('Erreur validation pin:', error?.data || error?.message || error)
-
-      if (error?.status === 401 || error?.code === 'INVALID_PIN') {
-        Alert.alert(
-          'PIN incorrect',
-          'Le code PIN saisi est incorrect. Vérifie le code puis réessaie.'
-        )
-        return
-      }
-
-      if (error?.status === 404) {
-        Alert.alert(
-          'Structure ou utilisateur introuvable',
-          error?.message ||
-            (isChief
-              ? 'Aucun chef n’est rattaché à cette structure.'
-              : 'Aucun pompiste n’est rattaché à cette structure.')
-        )
-        return
-      }
-
-      if (error?.status === 400) {
-        Alert.alert(
-          'Données invalides',
-          error?.message || 'Tous les champs obligatoires doivent être remplis avant validation.'
-        )
-        return
-      }
-
-      Alert.alert(
-        'Erreur',
+      const message =
+        error?.response?.data?.message ||
         error?.message ||
-          'Impossible d’ouvrir la session. Vérifie la structure et réessaie.'
-      )
+        'Impossible de créer le compte pour le moment.'
+      Alert.alert('Création impossible', message)
     } finally {
-      setSubmitting(false)
+      setLoading(false)
     }
   }
 
-  if (loading) {
+  async function handleLoadStructureUsers() {
+    if (!structureCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code structure.')
+      return
+    }
+
+    try {
+      setLoadingUsers(true)
+      resetStructureFlow()
+
+      const normalizedCode = structureCode.trim().toUpperCase()
+      const roleQuery = role === 'pump_attendant' ? 'pump_attendant' : 'driver'
+
+      const response = await api.get(
+        `/auth/structure-users/${normalizedCode}?role=${roleQuery}`
+      )
+
+      const users = response?.data?.data?.users || []
+
+      if (!users.length) {
+        Alert.alert(
+          'Aucun profil trouvé',
+          `Aucun ${role === 'pump_attendant' ? 'pompiste' : 'chauffeur'} actif trouvé pour cette structure.`
+        )
+        return
+      }
+
+      setAvailableUsers(users)
+      setSelectedUserId(users[0]?.id || null)
+      setSelectedUserName(users[0]?.name || '')
+      setSelectedUserPin('')
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible de charger les profils de cette structure.'
+      Alert.alert('Accès impossible', message)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
+  function handleSelectUser(user) {
+    setSelectedUserId(user.id)
+    setSelectedUserName(user.name)
+    setSelectedUserPin('')
+  }
+
+  async function handleDriverAccess() {
+    if (!structureCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code structure.')
+      return
+    }
+
+    if (!selectedUserId) {
+      Alert.alert('Champ manquant', 'Choisis ton nom dans la liste.')
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const response = await api.post('/auth/driver-access', {
+        structure_code: structureCode.trim().toUpperCase(),
+        driver_id: selectedUserId
+      })
+
+      const payload = response?.data?.data
+
+      if (!payload?.token || !payload?.session) {
+        throw new Error('Réponse chauffeur invalide')
+      }
+
+      await setStoredSession({
+        token: payload.token,
+        role: payload.session.role,
+        userId: payload.session.userId,
+        userName: payload.session.userName,
+        structureId: payload.session.structureId,
+        structureName: payload.session.structureName,
+        structureCode: payload.session.structureCode,
+        truckNumber: payload.session.truckNumber || null,
+        expiresAt: payload.expires_at
+      })
+
+      Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'DriverDashboard' }]
+      })
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible d’ouvrir l’espace chauffeur.'
+      Alert.alert('Accès refusé', message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handlePumpAccess() {
+    if (!structureCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code structure.')
+      return
+    }
+
+    if (!selectedUserId) {
+      Alert.alert('Champ manquant', 'Choisis ton profil pompiste.')
+      return
+    }
+
+    const selectedUser = availableUsers.find((user) => user.id === selectedUserId)
+
+    if (!selectedUser) {
+      Alert.alert('Erreur', 'Profil pompiste introuvable.')
+      return
+    }
+
+    if ((selectedUser.pin_code || '').trim() !== selectedUserPin.trim()) {
+      Alert.alert('Code incorrect', 'Le code PIN du pompiste est incorrect.')
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const response = await api.post('/auth/pump-access', {
+        structure_code: structureCode.trim().toUpperCase(),
+        pump_attendant_id: selectedUserId
+      })
+
+      const payload = response?.data?.data
+
+      if (!payload?.token || !payload?.session) {
+        throw new Error('Réponse pompiste invalide')
+      }
+
+      await setStoredSession({
+        token: payload.token,
+        role: payload.session.role,
+        userId: payload.session.userId,
+        userName: payload.session.userName,
+        structureId: payload.session.structureId,
+        structureName: payload.session.structureName,
+        structureCode: payload.session.structureCode,
+        expiresAt: payload.expires_at
+      })
+
+      Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'PumpAttendantDashboard' }]
+      })
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible d’ouvrir l’espace pompiste.'
+      Alert.alert('Accès refusé', message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function renderChiefLogin() {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#081B33" />
-        <Text style={styles.loadingText}>Chargement des structures...</Text>
+      <View style={styles.block}>
+        <Text style={styles.blockTitle}>Se connecter</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Numéro du chef"
+          value={chiefPhone}
+          onChangeText={setChiefPhone}
+          keyboardType="phone-pad"
+          autoCapitalize="none"
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Mot de passe"
+          value={chiefPassword}
+          onChangeText={setChiefPassword}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+
+        <TouchableOpacity
+          style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
+          onPress={handleChiefLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Se connecter</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.switchButton} onPress={() => setMode('register')}>
+          <Text style={styles.switchButtonText}>Créer un compte chef</Text>
+        </TouchableOpacity>
       </View>
     )
   }
 
-  if (structures.length === 0) {
+  function renderChiefRegister() {
     return (
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.topCard}>
-          <View style={[styles.badgeBase, badgeStyle]}>
-            <Text style={badgeTextStyle}>{badgeLabel}</Text>
-          </View>
+      <View style={styles.block}>
+        <Text style={styles.blockTitle}>Créer un compte chef</Text>
 
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>
-            {isChief
-              ? 'Aucune structure n’existe encore. Crée d’abord ta structure.'
-              : 'Aucune structure n’est disponible. Demande au chef de créer sa structure d’abord.'}
-          </Text>
-        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Nom de la structure"
+          value={createName}
+          onChangeText={setCreateName}
+        />
 
-        <View style={styles.formCard}>
-          {isChief ? (
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => navigation.navigate('CreateStructure')}
-              activeOpacity={0.9}
-            >
-              <Text style={styles.buttonText}>Créer ma structure</Text>
-            </TouchableOpacity>
+        <TextInput
+          style={styles.input}
+          placeholder="Nom du chef"
+          value={createOwnerName}
+          onChangeText={setCreateOwnerName}
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Numéro du chef"
+          value={createPhone}
+          onChangeText={setCreatePhone}
+          keyboardType="phone-pad"
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Code structure (ex: TEMYA01)"
+          value={createStructureCode}
+          onChangeText={(value) => setCreateStructureCode(value.toUpperCase())}
+          autoCapitalize="characters"
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Mot de passe"
+          value={createPassword}
+          onChangeText={setCreatePassword}
+          secureTextEntry
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Confirmer le mot de passe"
+          value={createConfirmPassword}
+          onChangeText={setCreateConfirmPassword}
+          secureTextEntry
+        />
+
+        <TouchableOpacity
+          style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
+          onPress={handleChiefCreateAccount}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <View style={styles.infoBox}>
-              <Text style={styles.infoTitle}>Structure manquante</Text>
-              <Text style={styles.infoText}>
-                Le pompiste ne peut pas se connecter tant qu’aucune structure n’a été créée par le chef.
-              </Text>
-            </View>
+            <Text style={styles.primaryButtonText}>Créer le compte</Text>
           )}
-        </View>
-      </ScrollView>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.switchButton} onPress={() => setMode('login')}>
+          <Text style={styles.switchButtonText}>J’ai déjà un compte</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
+  function renderStructureAccess() {
+    return (
+      <View style={styles.block}>
+        <Text style={styles.blockTitle}>Entrer le code structure</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Code structure"
+          value={structureCode}
+          onChangeText={(value) => {
+            setStructureCode(value.toUpperCase())
+            resetStructureFlow()
+          }}
+          autoCapitalize="characters"
+        />
+
+        <TouchableOpacity
+          style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
+          onPress={handleLoadStructureUsers}
+          disabled={loadingUsers}
+        >
+          {loadingUsers ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Charger les profils</Text>
+          )}
+        </TouchableOpacity>
+
+        {!!availableUsers.length && (
+          <View style={styles.selectionBox}>
+            <Text style={styles.selectionTitle}>
+              Choisis ton {role === 'pump_attendant' ? 'profil pompiste' : 'nom'}
+            </Text>
+
+            {availableUsers.map((user) => {
+              const isSelected = selectedUserId === user.id
+
+              return (
+                <TouchableOpacity
+                  key={user.id}
+                  style={[
+                    styles.userRow,
+                    isSelected && { borderColor: screenConfig.accent, backgroundColor: '#F8FBFF' }
+                  ]}
+                  onPress={() => handleSelectUser(user)}
+                >
+                  <View style={styles.userRowLeft}>
+                    <Text style={styles.userName}>{user.name}</Text>
+                    {!!user.truck_number && (
+                      <Text style={styles.userMeta}>Camion : {user.truck_number}</Text>
+                    )}
+                    {!!user.phone && <Text style={styles.userMeta}>Tél : {user.phone}</Text>}
+                  </View>
+
+                  <View
+                    style={[
+                      styles.radio,
+                      isSelected && { borderColor: screenConfig.accent, backgroundColor: screenConfig.accent }
+                    ]}
+                  />
+                </TouchableOpacity>
+              )
+            })}
+
+            {role === 'pump_attendant' && (
+              <TextInput
+                style={styles.input}
+                placeholder="Code PIN pompiste"
+                value={selectedUserPin}
+                onChangeText={setSelectedUserPin}
+                keyboardType="numeric"
+                secureTextEntry
+              />
+            )}
+
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
+              onPress={role === 'pump_attendant' ? handlePumpAccess : handleDriverAccess}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {role === 'pump_attendant' ? 'Ouvrir l’espace pompiste' : 'Ouvrir l’espace chauffeur'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     )
   }
 
@@ -209,98 +576,27 @@ export default function PinAccessScreen({ route, navigation }) {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.topCard}>
-        <View style={[styles.badgeBase, badgeStyle]}>
-          <Text style={badgeTextStyle}>{badgeLabel}</Text>
+      <View style={[styles.heroCard, { borderTopColor: screenConfig.accent }]}>
+        <View style={[styles.heroBadge, { backgroundColor: screenConfig.accent }]}>
+          <Text style={styles.heroBadgeText}>{screenConfig.badge}</Text>
         </View>
 
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.subtitle}>{subtitle}</Text>
+        <Text style={styles.heroTitle}>{screenConfig.title}</Text>
+        <Text style={styles.heroSubtitle}>{screenConfig.subtitle}</Text>
       </View>
 
-      {isChief ? (
-        <View style={styles.secondaryActionCard}>
-          <Text style={styles.secondaryActionTitle}>Nouveau chef ?</Text>
-          <Text style={styles.secondaryActionText}>
-            Si tu n’as pas encore de structure, crée-la d’abord au lieu de choisir une structure existante.
-          </Text>
+      {role === 'chief'
+        ? mode === 'register'
+          ? renderChiefRegister()
+          : renderChiefLogin()
+        : renderStructureAccess()}
 
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => navigation.navigate('CreateStructure')}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.secondaryButtonText}>Créer une nouvelle structure</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      <View style={styles.formCard}>
-        <Text style={styles.label}>Structure</Text>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-          style={styles.chipsScroll}
-        >
-          {structures.map((item) => {
-            const active = String(item.id) === String(selectedStructureId)
-
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => handleSelectStructure(item)}
-                activeOpacity={0.9}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {item.name}
-                </Text>
-              </TouchableOpacity>
-            )
-          })}
-        </ScrollView>
-
-        <Text style={styles.label}>Code PIN</Text>
-
-        <TextInput
-          style={styles.input}
-          value={pin}
-          onChangeText={setPin}
-          placeholder="Entrer le code PIN"
-          placeholderTextColor="#94A3B8"
-          keyboardType="numeric"
-          secureTextEntry
-          maxLength={8}
-          editable={!submitting}
-        />
-
-        <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>Accès protégé</Text>
-          <Text style={styles.infoText}>
-            L’accès est lié à la structure choisie. Vérifie bien que tu te connectes à la bonne structure.
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.button, submitting && styles.buttonDisabled]}
-          onPress={handleValidate}
-          activeOpacity={0.9}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <View style={styles.buttonInline}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-              <Text style={styles.buttonTextLoading}>Connexion en cours...</Text>
-            </View>
-          ) : (
-            <Text style={styles.buttonText}>Ouvrir la session</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <Text style={styles.backButtonText}>← Retour</Text>
+      </TouchableOpacity>
     </ScrollView>
   )
 }
@@ -311,199 +607,146 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F7FB'
   },
   content: {
-    padding: 20,
+    padding: 18,
     paddingBottom: 32
   },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3F7FB',
-    paddingHorizontal: 24
-  },
-  loadingText: {
-    marginTop: 12,
-    color: '#475569',
-    fontSize: 15,
-    textAlign: 'center'
-  },
-  topCard: {
+  heroCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 20,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 3
+    marginBottom: 16,
+    borderTopWidth: 6,
+    shadowColor: '#081B33',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2
   },
-  secondaryActionCard: {
-    backgroundColor: '#F5F3FF',
-    borderRadius: 24,
-    padding: 18,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: '#DDD6FE'
-  },
-  secondaryActionTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#4C1D95',
-    marginBottom: 8
-  },
-  secondaryActionText: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: '#5B21B6',
-    marginBottom: 14
-  },
-  secondaryButton: {
-    backgroundColor: '#7C3AED',
-    borderRadius: 16,
-    minHeight: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16
-  },
-  secondaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800'
-  },
-  badgeBase: {
+  heroBadge: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginBottom: 12
   },
-  badgeChief: {
-    backgroundColor: '#CCFBF1'
-  },
-  badgePump: {
-    backgroundColor: '#FEF3C7'
-  },
-  badgeChiefText: {
-    color: '#115E59',
-    fontWeight: '800',
-    fontSize: 12
-  },
-  badgePumpText: {
-    color: '#92400E',
-    fontWeight: '800',
-    fontSize: 12
-  },
-  title: {
-    fontSize: 28,
-    lineHeight: 34,
+  heroBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '900',
-    color: '#0F172A',
+    letterSpacing: 0.5
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#081B33',
     marginBottom: 8
   },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#475569'
-  },
-  formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 3
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 10
-  },
-  chipsScroll: {
-    marginBottom: 18
-  },
-  chipsRow: {
-    paddingRight: 8
-  },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: '#E2E8F0',
-    marginRight: 10
-  },
-  chipActive: {
-    backgroundColor: '#081B33'
-  },
-  chipText: {
-    color: '#334155',
-    fontWeight: '700'
-  },
-  chipTextActive: {
-    color: '#FFFFFF'
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 16,
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#0F172A',
-    marginBottom: 16
-  },
-  infoBox: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 18
-  },
-  infoTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#1D4ED8',
-    marginBottom: 6
-  },
-  infoText: {
+  heroSubtitle: {
     fontSize: 14,
     lineHeight: 21,
-    color: '#1E3A8A'
+    color: '#5F6E7D'
   },
-  button: {
-    backgroundColor: '#081B33',
-    borderRadius: 18,
-    minHeight: 56,
+  block: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#081B33',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2
+  },
+  blockTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#081B33',
+    marginBottom: 14
+  },
+  input: {
+    backgroundColor: '#F6F9FC',
+    borderWidth: 1,
+    borderColor: '#DFE7F0',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#081B33',
+    marginBottom: 12
+  },
+  primaryButton: {
+    borderRadius: 16,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18
+    marginTop: 2
   },
-  buttonDisabled: {
-    opacity: 0.7
-  },
-  buttonText: {
+  primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800'
   },
-  buttonInline: {
-    flexDirection: 'row',
+  switchButton: {
+    marginTop: 14,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    paddingVertical: 8
   },
-  buttonTextLoading: {
-    color: '#FFFFFF',
+  switchButtonText: {
+    color: '#081B33',
+    fontSize: 14,
+    fontWeight: '700'
+  },
+  selectionBox: {
+    marginTop: 16,
+    paddingTop: 8
+  },
+  selectionTitle: {
     fontSize: 16,
     fontWeight: '800',
-    marginLeft: 10
+    color: '#081B33',
+    marginBottom: 12
+  },
+  userRow: {
+    borderWidth: 1,
+    borderColor: '#DFE7F0',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF'
+  },
+  userRowLeft: {
+    flex: 1,
+    paddingRight: 10
+  },
+  userName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#081B33',
+    marginBottom: 4
+  },
+  userMeta: {
+    fontSize: 13,
+    color: '#5F6E7D'
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: '#C9D4E0'
+  },
+  backButton: {
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14
+  },
+  backButtonText: {
+    color: '#516173',
+    fontSize: 14,
+    fontWeight: '700'
   }
 })
