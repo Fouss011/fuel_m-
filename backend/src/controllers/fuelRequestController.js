@@ -482,10 +482,10 @@ export async function serveFuelRequest(req, res, next) {
       })
     }
 
-    if (amount === null || Number.isNaN(amount) || amount < 0) {
+    if (amount !== null && (Number.isNaN(amount) || amount < 0)) {
       return res.status(400).json({
         success: false,
-        message: 'Le montant est obligatoire et doit être un nombre valide.'
+        message: 'Le montant doit être un nombre valide.'
       })
     }
 
@@ -521,15 +521,20 @@ export async function serveFuelRequest(req, res, next) {
       })
     }
 
+    const updatePayload = {
+      pump_attendant_id: Number(req.auth.userId),
+      served_liters: servedLiters,
+      status: 'served',
+      served_at: new Date().toISOString()
+    }
+
+    if (amount !== null) {
+      updatePayload.amount = amount
+    }
+
     const { data, error } = await supabase
       .from('fuel_requests')
-      .update({
-        pump_attendant_id: Number(req.auth.userId),
-        served_liters: servedLiters,
-        amount,
-        status: 'served',
-        served_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select(`
         *,
