@@ -154,6 +154,11 @@ export async function fetchStructureUsers(structureId, role) {
   return response.data
 }
 
+export async function updateStructure(id, payload) {
+  const response = await api.patch(`/structures/${id}`, payload)
+  return response.data
+}
+
 export async function createDriverUser(payload) {
   const response = await api.post('/users/drivers', payload)
   return response.data

@@ -281,3 +281,99 @@ export async function getAllStructures(req, res, next) {
     next(error)
   }
 }
+
+export async function updateStructure(req, res, next) {
+  try {
+    const structureId = Number(req.params.id)
+
+    if (!Number.isInteger(structureId) || structureId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant structure invalide'
+      })
+    }
+
+    if (!chiefOwnsStructure(req, structureId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé à cette structure'
+      })
+    }
+
+    const name = normalizeString(req.body?.name)
+    const structureCode = normalizeStructureCode(req.body?.structure_code)
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le nom de la structure est obligatoire'
+      })
+    }
+
+    if (!structureCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le code structure est obligatoire'
+      })
+    }
+
+    if (!isValidStructureCode(structureCode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le code structure doit contenir entre 4 et 20 caractères majuscules, chiffres, tirets ou underscores'
+      })
+    }
+
+    const { data: existingCode, error: existingCodeError } = await supabase
+      .from('structures')
+      .select('id')
+      .eq('structure_code', structureCode)
+      .neq('id', structureId)
+      .maybeSingle()
+
+    if (existingCodeError) throw existingCodeError
+
+    if (existingCode) {
+      return res.status(409).json({
+        success: false,
+        message: 'Ce code structure est déjà utilisé'
+      })
+    }
+
+    const { data: existingName, error: existingNameError } = await supabase
+      .from('structures')
+      .select('id')
+      .ilike('name', name)
+      .neq('id', structureId)
+      .maybeSingle()
+
+    if (existingNameError) throw existingNameError
+
+    if (existingName) {
+      return res.status(409).json({
+        success: false,
+        message: 'Une autre structure avec ce nom existe déjà'
+      })
+    }
+
+    const { data, error } = await supabase
+      .from('structures')
+      .update({
+        name,
+        structure_code: structureCode
+      })
+      .eq('id', structureId)
+      .select('id, name, structure_code, owner_name, owner_phone, created_at')
+      .single()
+
+    if (error) throw error
+
+    return res.json({
+      success: true,
+      message: 'Structure mise à jour avec succès',
+      data: sanitizeStructure(data)
+    })
+  } catch (error) {
+    next(error)
+  }
+}

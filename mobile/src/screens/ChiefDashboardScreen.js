@@ -19,6 +19,9 @@ import {
   fetchStructureUsers,
   createDriverUser,
   createPumpAttendantUser,
+  updateUser,
+  deactivateUser,
+  updateStructure,
   getStoredSession,
   clearSession
 } from '../api/client'
@@ -45,6 +48,10 @@ export default function ChiefDashboardScreen({ navigation }) {
 
   const [creatingDriver, setCreatingDriver] = useState(false)
   const [creatingPump, setCreatingPump] = useState(false)
+  const [savingStructure, setSavingStructure] = useState(false)
+
+  const [structureName, setStructureName] = useState('')
+  const [structureCode, setStructureCode] = useState('')
 
   const [driverName, setDriverName] = useState('')
   const [driverPhone, setDriverPhone] = useState('')
@@ -54,6 +61,12 @@ export default function ChiefDashboardScreen({ navigation }) {
   const [pumpName, setPumpName] = useState('')
   const [pumpPhone, setPumpPhone] = useState('')
   const [pumpPin, setPumpPin] = useState('')
+
+  const [editingUserId, setEditingUserId] = useState(null)
+  const [editingName, setEditingName] = useState('')
+  const [editingPhone, setEditingPhone] = useState('')
+  const [editingTruck, setEditingTruck] = useState('')
+  const [editingPin, setEditingPin] = useState('')
 
   useFocusEffect(
     useCallback(() => {
@@ -83,6 +96,9 @@ export default function ChiefDashboardScreen({ navigation }) {
       setRequests(requestsRes?.data || [])
       setDrivers(driversRes?.data?.users || [])
       setPumpAttendants(pumpsRes?.data?.users || [])
+
+      setStructureName(storedSession?.structureName || '')
+      setStructureCode(storedSession?.structureCode || '')
     } catch (error) {
       const message =
         error?.response?.data?.message ||
@@ -254,6 +270,123 @@ export default function ChiefDashboardScreen({ navigation }) {
     }
   }
 
+  async function handleSaveStructure() {
+    if (!session?.structureId) {
+      Alert.alert('Erreur', 'Structure introuvable.')
+      return
+    }
+
+    if (!structureName.trim()) {
+      Alert.alert('Champ manquant', 'Entre le nom de la structure.')
+      return
+    }
+
+    if (!structureCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code structure.')
+      return
+    }
+
+    try {
+      setSavingStructure(true)
+
+      const response = await updateStructure(session.structureId, {
+        name: structureName.trim(),
+        structure_code: structureCode.trim().toUpperCase()
+      })
+
+      const updated = response?.data
+
+      const nextSession = {
+        ...session,
+        structureName: updated?.name || structureName.trim(),
+        structureCode: updated?.structure_code || structureCode.trim().toUpperCase()
+      }
+
+      setSession(nextSession)
+      setStructureName(nextSession.structureName)
+      setStructureCode(nextSession.structureCode)
+
+      Alert.alert(
+        'Succès',
+        'Structure mise à jour. Les prochaines connexions utiliseront le nouveau code.'
+      )
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible de mettre à jour la structure.'
+      Alert.alert('Erreur', message)
+    } finally {
+      setSavingStructure(false)
+    }
+  }
+
+  function startEditUser(user) {
+    setEditingUserId(user.id)
+    setEditingName(user.name || '')
+    setEditingPhone(user.phone || '')
+    setEditingTruck(user.truck_number || '')
+    setEditingPin('')
+  }
+
+  function cancelEditUser() {
+    setEditingUserId(null)
+    setEditingName('')
+    setEditingPhone('')
+    setEditingTruck('')
+    setEditingPin('')
+  }
+
+  async function handleSaveUser(user) {
+    try {
+      const payload = {
+        name: editingName.trim(),
+        phone: editingPhone.trim() || null
+      }
+
+      if (user.role === 'driver') {
+        payload.truck_number = editingTruck.trim().toUpperCase()
+        if (editingPin.trim()) {
+          payload.pin_code = editingPin.trim()
+        }
+      }
+
+      if (user.role === 'pump_attendant') {
+        if (editingPin.trim()) {
+          payload.pin_code = editingPin.trim()
+        }
+      }
+
+      await updateUser(user.id, payload)
+      Alert.alert('Succès', 'Utilisateur mis à jour.')
+      cancelEditUser()
+      await loadAll()
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible de modifier cet utilisateur.'
+      Alert.alert('Erreur', message)
+    }
+  }
+
+  async function handleDeleteUser(user) {
+    try {
+      await deactivateUser(user.id)
+      Alert.alert('Succès', 'Utilisateur supprimé de la structure.')
+      if (editingUserId === user.id) {
+        cancelEditUser()
+      }
+      await loadAll()
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible de supprimer cet utilisateur.'
+      Alert.alert('Erreur', message)
+    }
+  }
+
   async function handleLogout() {
     try {
       await clearSession()
@@ -377,9 +510,128 @@ export default function ChiefDashboardScreen({ navigation }) {
     )
   }
 
+  function renderUserCard(user) {
+    const isEditing = editingUserId === user.id
+
+    return (
+      <View key={`${user.role}-${user.id}`} style={styles.userCard}>
+        {isEditing ? (
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="Nom"
+              value={editingName}
+              onChangeText={setEditingName}
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Téléphone"
+              value={editingPhone}
+              onChangeText={setEditingPhone}
+              keyboardType="phone-pad"
+            />
+
+            {user.role === 'driver' && (
+              <TextInput
+                style={styles.input}
+                placeholder="Numéro du camion"
+                value={editingTruck}
+                onChangeText={setEditingTruck}
+                autoCapitalize="characters"
+              />
+            )}
+
+            <TextInput
+              style={styles.input}
+              placeholder="Nouveau code PIN (optionnel)"
+              value={editingPin}
+              onChangeText={setEditingPin}
+              keyboardType="numeric"
+              secureTextEntry
+            />
+
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.rejectButton]}
+                onPress={cancelEditUser}
+              >
+                <Text style={styles.actionButtonText}>Annuler</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.approveButton]}
+                onPress={() => handleSaveUser(user)}
+              >
+                <Text style={styles.actionButtonText}>Enregistrer</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.userName}>{user.name}</Text>
+            {!!user.phone && <Text style={styles.userMeta}>Tél : {user.phone}</Text>}
+            {user.role === 'driver' && (
+              <Text style={styles.userMeta}>
+                {user.truck_number ? `Camion ${user.truck_number}` : 'Sans camion'}
+              </Text>
+            )}
+
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.editButton]}
+                onPress={() => startEditUser(user)}
+              >
+                <Text style={styles.actionButtonText}>Modifier</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deleteButton]}
+                onPress={() => handleDeleteUser(user)}
+              >
+                <Text style={styles.actionButtonText}>Supprimer</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </View>
+    )
+  }
+
   function renderAdminBlock() {
     return (
       <View>
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Paramètres structure</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Nom de la structure"
+            value={structureName}
+            onChangeText={setStructureName}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Code structure"
+            value={structureCode}
+            onChangeText={(value) => setStructureCode(value.toUpperCase())}
+            autoCapitalize="characters"
+          />
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleSaveStructure}
+            disabled={savingStructure}
+          >
+            {savingStructure ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Mettre à jour la structure</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Créer un chauffeur</Text>
 
@@ -469,34 +721,18 @@ export default function ChiefDashboardScreen({ navigation }) {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Équipe</Text>
-
-          <Text style={styles.groupTitle}>Chauffeurs ({drivers.length})</Text>
+          <Text style={styles.sectionTitle}>Chauffeurs ({drivers.length})</Text>
           {drivers.length ? (
-            drivers.map((item) => (
-              <View key={`driver-${item.id}`} style={styles.userRow}>
-                <Text style={styles.userName}>{item.name}</Text>
-                <Text style={styles.userMeta}>
-                  {item.truck_number ? `Camion ${item.truck_number}` : 'Sans camion'}
-                </Text>
-              </View>
-            ))
+            drivers.map(renderUserCard)
           ) : (
             <Text style={styles.emptyText}>Aucun chauffeur créé pour le moment.</Text>
           )}
+        </View>
 
-          <Text style={[styles.groupTitle, { marginTop: 16 }]}>
-            Pompistes ({pumpAttendants.length})
-          </Text>
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Pompistes ({pumpAttendants.length})</Text>
           {pumpAttendants.length ? (
-            pumpAttendants.map((item) => (
-              <View key={`pump-${item.id}`} style={styles.userRow}>
-                <Text style={styles.userName}>{item.name}</Text>
-                <Text style={styles.userMeta}>
-                  {item.phone ? item.phone : 'Sans téléphone'}
-                </Text>
-              </View>
-            ))
+            pumpAttendants.map(renderUserCard)
           ) : (
             <Text style={styles.emptyText}>Aucun pompiste créé pour le moment.</Text>
           )}
@@ -735,30 +971,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800'
   },
-  userRow: {
-    borderWidth: 1,
-    borderColor: '#E5ECF3',
-    backgroundColor: '#FAFCFE',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 10
-  },
-  userName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#081B33'
-  },
-  userMeta: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#64748B'
-  },
-  groupTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 10
-  },
   filtersRow: {
     paddingTop: 4,
     paddingBottom: 4
@@ -839,9 +1051,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F766E',
     marginLeft: 8
   },
+  editButton: {
+    backgroundColor: '#2563EB',
+    marginRight: 8
+  },
+  deleteButton: {
+    backgroundColor: '#B91C1C',
+    marginLeft: 8
+  },
   actionButtonText: {
     color: '#FFFFFF',
     fontWeight: '800'
+  },
+  userCard: {
+    borderWidth: 1,
+    borderColor: '#E5ECF3',
+    backgroundColor: '#FAFCFE',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10
+  },
+  userName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#081B33'
+  },
+  userMeta: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#64748B'
   },
   emptyWrap: {
     backgroundColor: '#FFFFFF',
