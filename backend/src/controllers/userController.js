@@ -405,13 +405,16 @@ export async function updateUser(req, res, next) {
       updates.truck_number = truckNumber
     }
 
-    if (existingUser.role === 'pump_attendant' && Object.prototype.hasOwnProperty.call(req.body, 'pin_code')) {
+    if (
+      (existingUser.role === 'driver' || existingUser.role === 'pump_attendant') &&
+      Object.prototype.hasOwnProperty.call(req.body, 'pin_code')
+    ) {
       const pinCode = normalizePin(req.body.pin_code)
 
       if (!pinCode) {
         return res.status(400).json({
           success: false,
-          message: 'Le code PIN du pompiste est obligatoire.'
+          message: 'Le code PIN est obligatoire.'
         })
       }
 
