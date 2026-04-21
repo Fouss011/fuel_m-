@@ -303,6 +303,8 @@ export default function PinAccessScreen({ route, navigation }) {
   }
 
   async function handlePumpAccess() {
+  Alert.alert('Debug', 'handlePumpAccess appelé')
+
   if (!structureCode.trim()) {
     Alert.alert('Champ manquant', 'Entre le code structure.')
     return
@@ -320,6 +322,8 @@ export default function PinAccessScreen({ route, navigation }) {
 
   try {
     setLoading(true)
+
+    Alert.alert('Debug', `Envoi POST pump-access pour ID ${selectedUserId}`)
 
     const response = await api.post('/auth/pump-access', {
       structure_code: structureCode.trim().toUpperCase(),
