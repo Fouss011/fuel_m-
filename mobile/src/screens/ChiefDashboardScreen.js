@@ -128,37 +128,38 @@ export default function ChiefDashboardScreen({ navigation }) {
   }, [requests, driverFilter, truckFilter])
 
   async function handleApprove(item) {
-  try {
-    setLoading(true)
-    await approveFuelRequest(item.id, item.requested_liters)
-    Alert.alert('Succès', 'Demande validée avec succès.')
-    await loadAll()
-  } catch (error) {
-    const message =
-      error?.response?.data?.message ||
-      error?.message ||
-      'Impossible de valider la demande.'
-    Alert.alert('Erreur', message)
-  } finally {
-    setLoading(false)
+    try {
+      setLoading(true)
+      await approveFuelRequest(item.id, item.requested_liters)
+      Alert.alert('Succès', 'Demande validée avec succès.')
+      await loadAll()
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible de valider la demande.'
+      Alert.alert('Erreur', message)
+    } finally {
+      setLoading(false)
+    }
   }
-}
+
   async function handleReject(item) {
-  try {
-    setLoading(true)
-    await rejectFuelRequest(item.id)
-    Alert.alert('Succès', 'Demande refusée.')
-    await loadAll()
-  } catch (error) {
-    const message =
-      error?.response?.data?.message ||
-      error?.message ||
-      'Impossible de refuser la demande.'
-    Alert.alert('Erreur', message)
-  } finally {
-    setLoading(false)
+    try {
+      setLoading(true)
+      await rejectFuelRequest(item.id)
+      Alert.alert('Succès', 'Demande refusée.')
+      await loadAll()
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible de refuser la demande.'
+      Alert.alert('Erreur', message)
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   async function handleCreateDriver() {
     if (!session?.structureId) {
@@ -245,16 +246,16 @@ export default function ChiefDashboardScreen({ navigation }) {
   }
 
   async function handleLogout() {
-  try {
-    await clearSession()
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Home' }]
-    })
-  } catch (error) {
-    Alert.alert('Erreur', 'Impossible de se déconnecter.')
+    try {
+      await clearSession()
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }]
+      })
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de se déconnecter.')
+    }
   }
-}
 
   function renderStatusChip(item) {
     const isActive = activeStatus === item.key
@@ -375,6 +376,32 @@ export default function ChiefDashboardScreen({ navigation }) {
           </View>
 
           <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Demandes carburant</Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Filtrer par chauffeur"
+              value={driverFilter}
+              onChangeText={setDriverFilter}
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Filtrer par camion"
+              value={truckFilter}
+              onChangeText={setTruckFilter}
+            />
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filtersRow}
+            >
+              {STATUSES.map(renderStatusChip)}
+            </ScrollView>
+          </View>
+
+          <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Créer un chauffeur</Text>
 
             <TextInput
@@ -485,32 +512,6 @@ export default function ChiefDashboardScreen({ navigation }) {
             ) : (
               <Text style={styles.emptyText}>Aucun pompiste créé pour le moment.</Text>
             )}
-          </View>
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Demandes carburant</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Filtrer par chauffeur"
-              value={driverFilter}
-              onChangeText={setDriverFilter}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Filtrer par camion"
-              value={truckFilter}
-              onChangeText={setTruckFilter}
-            />
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filtersRow}
-            >
-              {STATUSES.map(renderStatusChip)}
-            </ScrollView>
           </View>
         </ScrollView>
       }
