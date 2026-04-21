@@ -128,57 +128,37 @@ export default function ChiefDashboardScreen({ navigation }) {
   }, [requests, driverFilter, truckFilter])
 
   async function handleApprove(item) {
-    Alert.alert(
-      'Valider la demande',
-      `Valider ${item.requested_liters} L pour ${item.driver_name} ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Valider',
-          onPress: async () => {
-            try {
-              await approveFuelRequest(item.id, item.requested_liters)
-              Alert.alert('Succès', 'Demande validée avec succès.')
-              await loadAll()
-            } catch (error) {
-              const message =
-                error?.response?.data?.message ||
-                error?.message ||
-                'Impossible de valider la demande.'
-              Alert.alert('Erreur', message)
-            }
-          }
-        }
-      ]
-    )
+  try {
+    setLoading(true)
+    await approveFuelRequest(item.id, item.requested_liters)
+    Alert.alert('Succès', 'Demande validée avec succès.')
+    await loadAll()
+  } catch (error) {
+    const message =
+      error?.response?.data?.message ||
+      error?.message ||
+      'Impossible de valider la demande.'
+    Alert.alert('Erreur', message)
+  } finally {
+    setLoading(false)
   }
-
+}
   async function handleReject(item) {
-    Alert.alert(
-      'Refuser la demande',
-      `Refuser la demande de ${item.driver_name} ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Refuser',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await rejectFuelRequest(item.id)
-              Alert.alert('Succès', 'Demande refusée.')
-              await loadAll()
-            } catch (error) {
-              const message =
-                error?.response?.data?.message ||
-                error?.message ||
-                'Impossible de refuser la demande.'
-              Alert.alert('Erreur', message)
-            }
-          }
-        }
-      ]
-    )
+  try {
+    setLoading(true)
+    await rejectFuelRequest(item.id)
+    Alert.alert('Succès', 'Demande refusée.')
+    await loadAll()
+  } catch (error) {
+    const message =
+      error?.response?.data?.message ||
+      error?.message ||
+      'Impossible de refuser la demande.'
+    Alert.alert('Erreur', message)
+  } finally {
+    setLoading(false)
   }
+}
 
   async function handleCreateDriver() {
     if (!session?.structureId) {
@@ -265,29 +245,16 @@ export default function ChiefDashboardScreen({ navigation }) {
   }
 
   async function handleLogout() {
-    Alert.alert(
-      'Déconnexion',
-      'Veux-tu vraiment quitter la session chef ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Se déconnecter',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clearSession()
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }]
-              })
-            } catch (error) {
-              Alert.alert('Erreur', 'Impossible de se déconnecter.')
-            }
-          }
-        }
-      ]
-    )
+  try {
+    await clearSession()
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }]
+    })
+  } catch (error) {
+    Alert.alert('Erreur', 'Impossible de se déconnecter.')
   }
+}
 
   function renderStatusChip(item) {
     const isActive = activeStatus === item.key

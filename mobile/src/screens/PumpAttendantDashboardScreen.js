@@ -123,30 +123,16 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
   }
 
   async function handleLogout() {
-    Alert.alert(
-      'Déconnexion',
-      'Veux-tu vraiment quitter la session pompiste ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Se déconnecter',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clearSession()
-
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }]
-              })
-            } catch (error) {
-              Alert.alert('Erreur', 'Impossible de se déconnecter.')
-            }
-          }
-        }
-      ]
-    )
+  try {
+    await clearSession()
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }]
+    })
+  } catch (error) {
+    Alert.alert('Erreur', 'Impossible de se déconnecter.')
   }
+}
 
   const stats = useMemo(() => {
     const total = requests.length
