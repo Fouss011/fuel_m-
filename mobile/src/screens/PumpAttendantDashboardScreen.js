@@ -62,65 +62,58 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
   }
 
   async function handleServe(item) {
-    const rawValue = servedValues[item.id]
+  const rawValue = servedValues[item.id]
 
-    if (!rawValue?.trim()) {
-      Alert.alert('Champ manquant', 'Entre la quantité réellement servie.')
-      return
-    }
-
-    const liters = Number(rawValue)
-
-    if (Number.isNaN(liters) || liters <= 0) {
-      Alert.alert('Valeur invalide', 'Entre une quantité correcte.')
-      return
-    }
-
-    if (liters > Number(item.approved_liters || 0)) {
-      Alert.alert(
-        'Quantité trop élevée',
-        `Tu ne peux pas servir plus de ${item.approved_liters} L validés par le chef.`
-      )
-      return
-    }
-
-    Alert.alert(
-      'Confirmer le service',
-      `Confirmer ${liters} L servis pour ${item.driver_name} ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Confirmer',
-          onPress: async () => {
-            try {
-              setServingId(item.id)
-
-              await serveFuelRequest(item.id, {
-                served_liters: liters
-              })
-
-              Alert.alert('Succès', 'Le service a été confirmé.')
-
-              setServedValues((prev) => ({
-                ...prev,
-                [item.id]: ''
-              }))
-
-              await loadPumpDashboard()
-            } catch (error) {
-              const message =
-                error?.response?.data?.message ||
-                error?.message ||
-                'Impossible de confirmer le service.'
-              Alert.alert('Erreur', message)
-            } finally {
-              setServingId(null)
-            }
-          }
-        }
-      ]
-    )
+  if (!rawValue?.trim()) {
+    Alert.alert('Champ manquant', 'Entre la quantité réellement servie.')
+    return
   }
+
+  const liters = Number(rawValue)
+
+  if (Number.isNaN(liters) || liters <= 0) {
+    Alert.alert('Valeur invalide', 'Entre une quantité correcte.')
+    return
+  }
+
+  if (liters > Number(item.approved_liters || 0)) {
+    Alert.alert(
+      'Quantité trop élevée',
+      `Tu ne peux pas servir plus de ${item.approved_liters} L validés par le chef.`
+    )
+    return
+  }
+
+  try {
+    setServingId(item.id)
+
+    const response = await serveFuelRequest(item.id, {
+      served_liters: liters
+    })
+
+    console.log('SERVICE RESPONSE =>', response)
+
+    Alert.alert('Succès', 'Le service a été confirmé.')
+
+    setServedValues((prev) => ({
+      ...prev,
+      [item.id]: ''
+    }))
+
+    await loadPumpDashboard()
+  } catch (error) {
+    console.log('SERVICE ERROR =>', error?.response?.data || error?.message || error)
+
+    const message =
+      error?.response?.data?.message ||
+      error?.message ||
+      'Impossible de confirmer le service.'
+
+    Alert.alert('Erreur', message)
+  } finally {
+    setServingId(null)
+  }
+}
 
   async function handleLogout() {
   try {
