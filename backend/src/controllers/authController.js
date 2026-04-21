@@ -131,6 +131,7 @@ export async function driverAccess(req, res, next) {
   try {
     const structureCode = normalizeStructureCode(req.body?.structure_code)
     const driverId = Number(req.body?.driver_id)
+    const pinCode = normalizeString(req.body?.pin_code)
 
     if (!structureCode) {
       return res.status(400).json({
@@ -143,6 +144,13 @@ export async function driverAccess(req, res, next) {
       return res.status(400).json({
         success: false,
         message: 'Le chauffeur est obligatoire.'
+      })
+    }
+
+    if (!pinCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le code PIN du chauffeur est obligatoire.'
       })
     }
 
@@ -163,7 +171,7 @@ export async function driverAccess(req, res, next) {
 
     const { data: driver, error: driverError } = await supabase
       .from('users')
-      .select('id, name, phone, truck_number, role, structure_id, is_active')
+      .select('id, name, phone, truck_number, role, structure_id, is_active, pin_code')
       .eq('id', driverId)
       .eq('structure_id', structure.id)
       .eq('role', 'driver')
@@ -176,6 +184,13 @@ export async function driverAccess(req, res, next) {
       return res.status(404).json({
         success: false,
         message: 'Chauffeur introuvable dans cette structure.'
+      })
+    }
+
+    if (String(driver.pin_code || '') !== String(pinCode)) {
+      return res.status(401).json({
+        success: false,
+        message: 'Code PIN chauffeur incorrect.'
       })
     }
 

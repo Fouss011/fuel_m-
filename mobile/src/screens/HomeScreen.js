@@ -27,7 +27,7 @@ const PUBLIC_CARDS = [
     key: 'driver',
     title: 'Chauffeur',
     subtitle:
-      'Entrer le code structure, choisir son nom et envoyer ses demandes de carburant.',
+      'Entrer le code structure, choisir son nom puis entrer son code PIN.',
     emoji: '🚛',
     accent: '#2563EB',
     soft: '#DBEAFE',
@@ -38,7 +38,7 @@ const PUBLIC_CARDS = [
     key: 'pump',
     title: 'Pompiste',
     subtitle:
-      'Entrer le code structure, accéder aux demandes validées et confirmer le service.',
+      'Entrer le code structure, choisir son profil puis entrer son code PIN.',
     emoji: '⛽',
     accent: '#B45309',
     soft: '#FEF3C7',
@@ -161,26 +161,13 @@ export default function HomeScreen({ navigation }) {
   }, [session])
 
   async function handleLogout() {
-    Alert.alert(
-      'Déconnexion',
-      'Veux-tu vraiment fermer la session sur cet appareil ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Se déconnecter',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clearSession()
-              setSession(null)
-              Alert.alert('Déconnecté', 'La session a bien été supprimée de cet appareil.')
-            } catch (error) {
-              Alert.alert('Erreur', 'Impossible de fermer la session pour le moment.')
-            }
-          }
-        }
-      ]
-    )
+    try {
+      await clearSession()
+      setSession(null)
+      Alert.alert('Déconnecté', 'La session a bien été supprimée de cet appareil.')
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de fermer la session pour le moment.')
+    }
   }
 
   if (loadingSession) {

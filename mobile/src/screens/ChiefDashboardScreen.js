@@ -37,6 +37,7 @@ export default function ChiefDashboardScreen({ navigation }) {
   const [activeStatus, setActiveStatus] = useState('all')
   const [driverFilter, setDriverFilter] = useState('')
   const [truckFilter, setTruckFilter] = useState('')
+  const [activeTab, setActiveTab] = useState('requests')
 
   const [session, setSession] = useState(null)
   const [drivers, setDrivers] = useState([])
@@ -48,6 +49,7 @@ export default function ChiefDashboardScreen({ navigation }) {
   const [driverName, setDriverName] = useState('')
   const [driverPhone, setDriverPhone] = useState('')
   const [driverTruck, setDriverTruck] = useState('')
+  const [driverPin, setDriverPin] = useState('')
 
   const [pumpName, setPumpName] = useState('')
   const [pumpPhone, setPumpPhone] = useState('')
@@ -177,6 +179,11 @@ export default function ChiefDashboardScreen({ navigation }) {
       return
     }
 
+    if (!driverPin.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code PIN du chauffeur.')
+      return
+    }
+
     try {
       setCreatingDriver(true)
 
@@ -184,13 +191,15 @@ export default function ChiefDashboardScreen({ navigation }) {
         structure_id: session.structureId,
         name: driverName.trim(),
         phone: driverPhone.trim() || null,
-        truck_number: driverTruck.trim().toUpperCase()
+        truck_number: driverTruck.trim().toUpperCase(),
+        pin_code: driverPin.trim()
       })
 
       Alert.alert('Succès', 'Chauffeur créé avec succès.')
       setDriverName('')
       setDriverPhone('')
       setDriverTruck('')
+      setDriverPin('')
       await loadAll()
     } catch (error) {
       const message =
@@ -338,190 +347,233 @@ export default function ChiefDashboardScreen({ navigation }) {
     )
   }
 
+  function renderRequestsHeader() {
+    return (
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Demandes carburant</Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Filtrer par chauffeur"
+          value={driverFilter}
+          onChangeText={setDriverFilter}
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Filtrer par camion"
+          value={truckFilter}
+          onChangeText={setTruckFilter}
+        />
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersRow}
+        >
+          {STATUSES.map(renderStatusChip)}
+        </ScrollView>
+      </View>
+    )
+  }
+
+  function renderAdminBlock() {
+    return (
+      <View>
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Créer un chauffeur</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Nom du chauffeur"
+            value={driverName}
+            onChangeText={setDriverName}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Téléphone du chauffeur"
+            value={driverPhone}
+            onChangeText={setDriverPhone}
+            keyboardType="phone-pad"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Numéro du camion"
+            value={driverTruck}
+            onChangeText={setDriverTruck}
+            autoCapitalize="characters"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Code PIN chauffeur"
+            value={driverPin}
+            onChangeText={setDriverPin}
+            keyboardType="numeric"
+            secureTextEntry
+          />
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleCreateDriver}
+            disabled={creatingDriver}
+          >
+            {creatingDriver ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Ajouter le chauffeur</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Créer un pompiste</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Nom du pompiste"
+            value={pumpName}
+            onChangeText={setPumpName}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Téléphone du pompiste"
+            value={pumpPhone}
+            onChangeText={setPumpPhone}
+            keyboardType="phone-pad"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Code PIN pompiste"
+            value={pumpPin}
+            onChangeText={setPumpPin}
+            keyboardType="numeric"
+            secureTextEntry
+          />
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleCreatePump}
+            disabled={creatingPump}
+          >
+            {creatingPump ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Ajouter le pompiste</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Équipe</Text>
+
+          <Text style={styles.groupTitle}>Chauffeurs ({drivers.length})</Text>
+          {drivers.length ? (
+            drivers.map((item) => (
+              <View key={`driver-${item.id}`} style={styles.userRow}>
+                <Text style={styles.userName}>{item.name}</Text>
+                <Text style={styles.userMeta}>
+                  {item.truck_number ? `Camion ${item.truck_number}` : 'Sans camion'}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>Aucun chauffeur créé pour le moment.</Text>
+          )}
+
+          <Text style={[styles.groupTitle, { marginTop: 16 }]}>
+            Pompistes ({pumpAttendants.length})
+          </Text>
+          {pumpAttendants.length ? (
+            pumpAttendants.map((item) => (
+              <View key={`pump-${item.id}`} style={styles.userRow}>
+                <Text style={styles.userName}>{item.name}</Text>
+                <Text style={styles.userMeta}>
+                  {item.phone ? item.phone : 'Sans téléphone'}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>Aucun pompiste créé pour le moment.</Text>
+          )}
+        </View>
+      </View>
+    )
+  }
+
+  function renderTopHeader() {
+    return (
+      <View style={styles.topHeaderWrap}>
+        <View style={styles.heroCard}>
+          <View>
+            <Text style={styles.heroTitle}>
+              {session?.structureName || 'Espace chef'}
+            </Text>
+            <Text style={styles.heroSubtitle}>
+              Gère ta structure, tes chauffeurs, tes pompistes et les demandes de carburant.
+            </Text>
+          </View>
+
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>Déconnexion</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.codeCard}>
+          <Text style={styles.codeLabel}>Code structure</Text>
+          <Text style={styles.codeValue}>{session?.structureCode || '---'}</Text>
+          <Text style={styles.codeHint}>
+            Donne ce code aux chauffeurs et pompistes pour entrer dans ta structure.
+          </Text>
+        </View>
+
+        <View style={styles.tabsRow}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'requests' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('requests')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'requests' && styles.tabButtonTextActive]}>
+              Demandes
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'admin' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('admin')}
+          >
+            <Text style={[styles.tabButtonText, activeTab === 'admin' && styles.tabButtonTextActive]}>
+              Administratif
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {activeTab === 'requests' ? renderRequestsHeader() : renderAdminBlock()}
+      </View>
+    )
+  }
+
   return (
     <FlatList
-      data={filteredRequests}
+      data={activeTab === 'requests' ? filteredRequests : []}
       keyExtractor={(item) => String(item.id)}
       renderItem={renderRequestItem}
       refreshControl={
         <RefreshControl refreshing={loading} onRefresh={refreshRequests} />
       }
-      ListHeaderComponent={
-        <ScrollView
-          horizontal={false}
-          contentContainerStyle={styles.headerContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.heroCard}>
-            <View>
-              <Text style={styles.heroTitle}>
-                {session?.structureName || 'Espace chef'}
-              </Text>
-              <Text style={styles.heroSubtitle}>
-                Gère ta structure, tes chauffeurs, tes pompistes et les demandes de carburant.
-              </Text>
-            </View>
-
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-              <Text style={styles.logoutButtonText}>Déconnexion</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.codeCard}>
-            <Text style={styles.codeLabel}>Code structure</Text>
-            <Text style={styles.codeValue}>{session?.structureCode || '---'}</Text>
-            <Text style={styles.codeHint}>
-              Donne ce code aux chauffeurs et pompistes pour entrer dans ta structure.
-            </Text>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Demandes carburant</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Filtrer par chauffeur"
-              value={driverFilter}
-              onChangeText={setDriverFilter}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Filtrer par camion"
-              value={truckFilter}
-              onChangeText={setTruckFilter}
-            />
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filtersRow}
-            >
-              {STATUSES.map(renderStatusChip)}
-            </ScrollView>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Créer un chauffeur</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Nom du chauffeur"
-              value={driverName}
-              onChangeText={setDriverName}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Téléphone du chauffeur"
-              value={driverPhone}
-              onChangeText={setDriverPhone}
-              keyboardType="phone-pad"
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Numéro du camion"
-              value={driverTruck}
-              onChangeText={setDriverTruck}
-              autoCapitalize="characters"
-            />
-
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleCreateDriver}
-              disabled={creatingDriver}
-            >
-              {creatingDriver ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Ajouter le chauffeur</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Créer un pompiste</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Nom du pompiste"
-              value={pumpName}
-              onChangeText={setPumpName}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Téléphone du pompiste"
-              value={pumpPhone}
-              onChangeText={setPumpPhone}
-              keyboardType="phone-pad"
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Code PIN pompiste"
-              value={pumpPin}
-              onChangeText={setPumpPin}
-              keyboardType="numeric"
-              secureTextEntry
-            />
-
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleCreatePump}
-              disabled={creatingPump}
-            >
-              {creatingPump ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Ajouter le pompiste</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Équipe</Text>
-
-            <Text style={styles.groupTitle}>Chauffeurs ({drivers.length})</Text>
-            {drivers.length ? (
-              drivers.map((item) => (
-                <View key={`driver-${item.id}`} style={styles.userRow}>
-                  <Text style={styles.userName}>{item.name}</Text>
-                  <Text style={styles.userMeta}>
-                    {item.truck_number ? `Camion ${item.truck_number}` : 'Sans camion'}
-                  </Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.emptyText}>Aucun chauffeur créé pour le moment.</Text>
-            )}
-
-            <Text style={[styles.groupTitle, { marginTop: 16 }]}>
-              Pompistes ({pumpAttendants.length})
-            </Text>
-            {pumpAttendants.length ? (
-              pumpAttendants.map((item) => (
-                <View key={`pump-${item.id}`} style={styles.userRow}>
-                  <Text style={styles.userName}>{item.name}</Text>
-                  <Text style={styles.userMeta}>
-                    {item.phone ? item.phone : 'Sans téléphone'}
-                  </Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.emptyText}>Aucun pompiste créé pour le moment.</Text>
-            )}
-          </View>
-        </ScrollView>
-      }
+      ListHeaderComponent={renderTopHeader()}
       ListEmptyComponent={
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>Aucune demande trouvée</Text>
-          <Text style={styles.emptyText}>
-            Les demandes des chauffeurs de ta structure apparaîtront ici.
-          </Text>
-        </View>
+        activeTab === 'requests' ? (
+          <View style={styles.emptyWrap}>
+            <Text style={styles.emptyTitle}>Aucune demande trouvée</Text>
+            <Text style={styles.emptyText}>
+              Les demandes des chauffeurs de ta structure apparaîtront ici.
+            </Text>
+          </View>
+        ) : null
       }
       contentContainerStyle={styles.listContent}
       style={styles.container}
@@ -568,7 +620,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40
   },
-  headerContainer: {
+  topHeaderWrap: {
     paddingBottom: 8
   },
   heroCard: {
@@ -623,6 +675,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: '#5F6E7D'
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    marginBottom: 16
+  },
+  tabButton: {
+    flex: 1,
+    backgroundColor: '#EEF3F8',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10
+  },
+  tabButtonActive: {
+    backgroundColor: '#081B33'
+  },
+  tabButtonText: {
+    color: '#516173',
+    fontWeight: '800',
+    fontSize: 14
+  },
+  tabButtonTextActive: {
+    color: '#FFFFFF'
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',

@@ -250,57 +250,63 @@ export default function PinAccessScreen({ route, navigation }) {
   }
 
   async function handleDriverAccess() {
-    if (!structureCode.trim()) {
-      Alert.alert('Champ manquant', 'Entre le code structure.')
-      return
-    }
-
-    if (!selectedUserId) {
-      Alert.alert('Champ manquant', 'Choisis ton nom dans la liste.')
-      return
-    }
-
-    try {
-      setLoading(true)
-
-      const response = await api.post('/auth/driver-access', {
-        structure_code: structureCode.trim().toUpperCase(),
-        driver_id: selectedUserId
-      })
-
-      const payload = response?.data?.data
-
-      if (!payload?.token || !payload?.session) {
-        throw new Error('Réponse chauffeur invalide')
-      }
-
-      await setStoredSession({
-        token: payload.token,
-        role: payload.session.role,
-        userId: payload.session.userId,
-        userName: payload.session.userName,
-        structureId: payload.session.structureId,
-        structureName: payload.session.structureName,
-        structureCode: payload.session.structureCode,
-        truckNumber: payload.session.truckNumber || null,
-        expiresAt: payload.expires_at
-      })
-
-      Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'DriverDashboard' }]
-      })
-    } catch (error) {
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        'Impossible d’ouvrir l’espace chauffeur.'
-      Alert.alert('Accès refusé', message)
-    } finally {
-      setLoading(false)
-    }
+  if (!structureCode.trim()) {
+    Alert.alert('Champ manquant', 'Entre le code structure.')
+    return
   }
+
+  if (!selectedUserId) {
+    Alert.alert('Champ manquant', 'Choisis ton nom dans la liste.')
+    return
+  }
+
+  if (!selectedUserPin.trim()) {
+    Alert.alert('Champ manquant', 'Entre le code PIN du chauffeur.')
+    return
+  }
+
+  try {
+    setLoading(true)
+
+    const response = await api.post('/auth/driver-access', {
+      structure_code: structureCode.trim().toUpperCase(),
+      driver_id: selectedUserId,
+      pin_code: selectedUserPin.trim()
+    })
+
+    const payload = response?.data?.data
+
+    if (!payload?.token || !payload?.session) {
+      throw new Error('Réponse chauffeur invalide')
+    }
+
+    await setStoredSession({
+      token: payload.token,
+      role: payload.session.role,
+      userId: payload.session.userId,
+      userName: payload.session.userName,
+      structureId: payload.session.structureId,
+      structureName: payload.session.structureName,
+      structureCode: payload.session.structureCode,
+      truckNumber: payload.session.truckNumber || null,
+      expiresAt: payload.expires_at
+    })
+
+    Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'DriverDashboard' }]
+    })
+  } catch (error) {
+    const message =
+      error?.response?.data?.message ||
+      error?.message ||
+      'Impossible d’ouvrir l’espace chauffeur.'
+    Alert.alert('Accès refusé', message)
+  } finally {
+    setLoading(false)
+  }
+}
 
   async function handlePumpAccess() {
   if (!structureCode.trim()) {
@@ -473,98 +479,119 @@ export default function PinAccessScreen({ route, navigation }) {
   }
 
   function renderStructureAccess() {
-    return (
-      <View style={styles.block}>
-        <Text style={styles.blockTitle}>Entrer le code structure</Text>
+  return (
+    <View style={styles.block}>
+      <Text style={styles.blockTitle}>Entrer le code structure</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Code structure"
-          value={structureCode}
-          onChangeText={(value) => {
-            setStructureCode(value.toUpperCase())
-            resetStructureFlow()
-          }}
-          autoCapitalize="characters"
-        />
+      <TextInput
+        style={styles.input}
+        placeholder="Code structure"
+        value={structureCode}
+        onChangeText={(value) => {
+          setStructureCode(value.toUpperCase())
+          resetStructureFlow()
+        }}
+        autoCapitalize="characters"
+      />
 
-        <TouchableOpacity
-          style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
-          onPress={handleLoadStructureUsers}
-          disabled={loadingUsers}
-        >
-          {loadingUsers ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.primaryButtonText}>Charger les profils</Text>
-          )}
-        </TouchableOpacity>
-
-        {!!availableUsers.length && (
-          <View style={styles.selectionBox}>
-            <Text style={styles.selectionTitle}>
-              Choisis ton {role === 'pump_attendant' ? 'profil pompiste' : 'nom'}
-            </Text>
-
-            {availableUsers.map((user) => {
-              const isSelected = selectedUserId === user.id
-
-              return (
-                <TouchableOpacity
-                  key={user.id}
-                  style={[
-                    styles.userRow,
-                    isSelected && { borderColor: screenConfig.accent, backgroundColor: '#F8FBFF' }
-                  ]}
-                  onPress={() => handleSelectUser(user)}
-                >
-                  <View style={styles.userRowLeft}>
-                    <Text style={styles.userName}>{user.name}</Text>
-                    {!!user.truck_number && (
-                      <Text style={styles.userMeta}>Camion : {user.truck_number}</Text>
-                    )}
-                    {!!user.phone && <Text style={styles.userMeta}>Tél : {user.phone}</Text>}
-                  </View>
-
-                  <View
-                    style={[
-                      styles.radio,
-                      isSelected && { borderColor: screenConfig.accent, backgroundColor: screenConfig.accent }
-                    ]}
-                  />
-                </TouchableOpacity>
-              )
-            })}
-
-            {role === 'pump_attendant' && (
-              <TextInput
-                style={styles.input}
-                placeholder="Code PIN pompiste"
-                value={selectedUserPin}
-                onChangeText={setSelectedUserPin}
-                keyboardType="numeric"
-                secureTextEntry
-              />
-            )}
-
-            <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
-              onPress={role === 'pump_attendant' ? handlePumpAccess : handleDriverAccess}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryButtonText}>
-                  {role === 'pump_attendant' ? 'Ouvrir l’espace pompiste' : 'Ouvrir l’espace chauffeur'}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
+      <TouchableOpacity
+        style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
+        onPress={handleLoadStructureUsers}
+        disabled={loadingUsers}
+      >
+        {loadingUsers ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={styles.primaryButtonText}>Charger les profils</Text>
         )}
-      </View>
-    )
-  }
+      </TouchableOpacity>
+
+      {!!availableUsers.length && (
+        <View style={styles.selectionBox}>
+          <Text style={styles.selectionTitle}>
+            Choisis ton {role === 'pump_attendant' ? 'profil pompiste' : 'nom'}
+          </Text>
+
+          {availableUsers.map((user) => {
+            const isSelected = selectedUserId === user.id
+
+            return (
+              <TouchableOpacity
+                key={user.id}
+                style={[
+                  styles.userRow,
+                  isSelected && {
+                    borderColor: screenConfig.accent,
+                    backgroundColor: '#F8FBFF'
+                  }
+                ]}
+                onPress={() => handleSelectUser(user)}
+              >
+                <View style={styles.userRowLeft}>
+                  <Text style={styles.userName}>{user.name}</Text>
+                  {!!user.truck_number && (
+                    <Text style={styles.userMeta}>Camion : {user.truck_number}</Text>
+                  )}
+                  {!!user.phone && (
+                    <Text style={styles.userMeta}>Tél : {user.phone}</Text>
+                  )}
+                </View>
+
+                <View
+                  style={[
+                    styles.radio,
+                    isSelected && {
+                      borderColor: screenConfig.accent,
+                      backgroundColor: screenConfig.accent
+                    }
+                  ]}
+                />
+              </TouchableOpacity>
+            )
+          })}
+
+          {role === 'driver' && (
+            <TextInput
+              style={styles.input}
+              placeholder="Code PIN chauffeur"
+              value={selectedUserPin}
+              onChangeText={setSelectedUserPin}
+              keyboardType="numeric"
+              secureTextEntry
+            />
+          )}
+
+          {role === 'pump_attendant' && (
+            <TextInput
+              style={styles.input}
+              placeholder="Code PIN pompiste"
+              value={selectedUserPin}
+              onChangeText={setSelectedUserPin}
+              keyboardType="numeric"
+              secureTextEntry
+            />
+          )}
+
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
+            onPress={role === 'pump_attendant' ? handlePumpAccess : handleDriverAccess}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>
+                {role === 'pump_attendant'
+                  ? 'Ouvrir l’espace pompiste'
+                  : 'Ouvrir l’espace chauffeur'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  )
+}
 
   return (
     <ScrollView

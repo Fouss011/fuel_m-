@@ -116,6 +116,7 @@ export async function createDriver(req, res, next) {
     const name = normalizeString(req.body?.name)
     const phone = normalizePhone(req.body?.phone)
     const truckNumber = normalizeTruckNumber(req.body?.truck_number)
+    const pinCode = normalizePin(req.body?.pin_code)
 
     if (!Number.isInteger(structureId) || structureId <= 0) {
       return res.status(400).json({
@@ -142,6 +143,20 @@ export async function createDriver(req, res, next) {
       return res.status(400).json({
         success: false,
         message: 'Le numéro du camion est obligatoire.'
+      })
+    }
+
+    if (!pinCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le code PIN du chauffeur est obligatoire.'
+      })
+    }
+
+    if (!isValidPin(pinCode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le code PIN du chauffeur doit contenir entre 4 et 8 chiffres.'
       })
     }
 
@@ -195,7 +210,7 @@ export async function createDriver(req, res, next) {
       truck_number: truckNumber,
       role: 'driver',
       is_active: true,
-      pin_code: null
+      pin_code: pinCode
     }
 
     const { data, error } = await supabase
