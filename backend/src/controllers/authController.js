@@ -201,6 +201,7 @@ export async function pumpAttendantAccess(req, res, next) {
   try {
     const structureCode = normalizeStructureCode(req.body?.structure_code)
     const pumpAttendantId = Number(req.body?.pump_attendant_id)
+    const pinCode = normalizeString(req.body?.pin_code)
 
     if (!structureCode) {
       return res.status(400).json({
@@ -213,6 +214,13 @@ export async function pumpAttendantAccess(req, res, next) {
       return res.status(400).json({
         success: false,
         message: 'Le pompiste est obligatoire.'
+      })
+    }
+
+    if (!pinCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le code PIN du pompiste est obligatoire.'
       })
     }
 
@@ -233,7 +241,7 @@ export async function pumpAttendantAccess(req, res, next) {
 
     const { data: pumpAttendant, error: pumpError } = await supabase
       .from('users')
-      .select('id, name, phone, role, structure_id, is_active')
+      .select('id, name, phone, role, structure_id, is_active, pin_code')
       .eq('id', pumpAttendantId)
       .eq('structure_id', structure.id)
       .eq('role', 'pump_attendant')
@@ -246,6 +254,13 @@ export async function pumpAttendantAccess(req, res, next) {
       return res.status(404).json({
         success: false,
         message: 'Pompiste introuvable dans cette structure.'
+      })
+    }
+
+    if (String(pumpAttendant.pin_code || '') !== String(pinCode)) {
+      return res.status(401).json({
+        success: false,
+        message: 'Code PIN pompiste incorrect.'
       })
     }
 

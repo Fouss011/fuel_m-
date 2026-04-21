@@ -303,68 +303,62 @@ export default function PinAccessScreen({ route, navigation }) {
   }
 
   async function handlePumpAccess() {
-    if (!structureCode.trim()) {
-      Alert.alert('Champ manquant', 'Entre le code structure.')
-      return
-    }
-
-    if (!selectedUserId) {
-      Alert.alert('Champ manquant', 'Choisis ton profil pompiste.')
-      return
-    }
-
-    const selectedUser = availableUsers.find((user) => user.id === selectedUserId)
-
-    if (!selectedUser) {
-      Alert.alert('Erreur', 'Profil pompiste introuvable.')
-      return
-    }
-
-    if ((selectedUser.pin_code || '').trim() !== selectedUserPin.trim()) {
-      Alert.alert('Code incorrect', 'Le code PIN du pompiste est incorrect.')
-      return
-    }
-
-    try {
-      setLoading(true)
-
-      const response = await api.post('/auth/pump-access', {
-        structure_code: structureCode.trim().toUpperCase(),
-        pump_attendant_id: selectedUserId
-      })
-
-      const payload = response?.data?.data
-
-      if (!payload?.token || !payload?.session) {
-        throw new Error('Réponse pompiste invalide')
-      }
-
-      await setStoredSession({
-        token: payload.token,
-        role: payload.session.role,
-        userId: payload.session.userId,
-        userName: payload.session.userName,
-        structureId: payload.session.structureId,
-        structureName: payload.session.structureName,
-        structureCode: payload.session.structureCode,
-        expiresAt: payload.expires_at
-      })
-
-      Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'PumpAttendantDashboard' }]
-      })
-    } catch (error) {
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        'Impossible d’ouvrir l’espace pompiste.'
-      Alert.alert('Accès refusé', message)
-    } finally {
-      setLoading(false)
-    }
+  if (!structureCode.trim()) {
+    Alert.alert('Champ manquant', 'Entre le code structure.')
+    return
   }
+
+  if (!selectedUserId) {
+    Alert.alert('Champ manquant', 'Choisis ton profil pompiste.')
+    return
+  }
+
+  if (!selectedUserPin.trim()) {
+    Alert.alert('Champ manquant', 'Entre le code PIN du pompiste.')
+    return
+  }
+
+  try {
+    setLoading(true)
+
+    const response = await api.post('/auth/pump-access', {
+      structure_code: structureCode.trim().toUpperCase(),
+      pump_attendant_id: selectedUserId,
+      pin_code: selectedUserPin.trim()
+    })
+
+    const payload = response?.data?.data
+
+    if (!payload?.token || !payload?.session) {
+      throw new Error('Réponse pompiste invalide')
+    }
+
+    await setStoredSession({
+      token: payload.token,
+      role: payload.session.role,
+      userId: payload.session.userId,
+      userName: payload.session.userName,
+      structureId: payload.session.structureId,
+      structureName: payload.session.structureName,
+      structureCode: payload.session.structureCode,
+      expiresAt: payload.expires_at
+    })
+
+    Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'PumpAttendantDashboard' }]
+    })
+  } catch (error) {
+    const message =
+      error?.response?.data?.message ||
+      error?.message ||
+      'Impossible d’ouvrir l’espace pompiste.'
+    Alert.alert('Accès refusé', message)
+  } finally {
+    setLoading(false)
+  }
+}
 
   function renderChiefLogin() {
     return (
