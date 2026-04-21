@@ -88,6 +88,7 @@ export async function getUsersByStructure(req, res, next) {
       .from('users')
       .select('id, structure_id, name, phone, truck_number, role, pin_code, is_active, created_at')
       .eq('structure_id', structureId)
+      .eq('is_active', true)
       .order('created_at', { ascending: false })
 
     if (role) {
