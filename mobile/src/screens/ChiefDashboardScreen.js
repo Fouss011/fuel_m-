@@ -26,6 +26,12 @@ import {
   clearSession
 } from '../api/client'
 
+const INPUT_PROPS = {
+  placeholderTextColor: '#64748B',
+  selectionColor: '#0F766E',
+  cursorColor: '#0F766E'
+}
+
 const STATUSES = [
   { key: 'all', label: 'Toutes' },
   { key: 'pending', label: 'En attente' },
@@ -486,6 +492,7 @@ export default function ChiefDashboardScreen({ navigation }) {
         <Text style={styles.sectionTitle}>Demandes carburant</Text>
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Filtrer par chauffeur"
           value={driverFilter}
@@ -493,6 +500,7 @@ export default function ChiefDashboardScreen({ navigation }) {
         />
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Filtrer par camion"
           value={truckFilter}
@@ -518,6 +526,7 @@ export default function ChiefDashboardScreen({ navigation }) {
         {isEditing ? (
           <>
             <TextInput
+              {...INPUT_PROPS}
               style={styles.input}
               placeholder="Nom"
               value={editingName}
@@ -525,6 +534,7 @@ export default function ChiefDashboardScreen({ navigation }) {
             />
 
             <TextInput
+              {...INPUT_PROPS}
               style={styles.input}
               placeholder="Téléphone"
               value={editingPhone}
@@ -534,6 +544,7 @@ export default function ChiefDashboardScreen({ navigation }) {
 
             {user.role === 'driver' && (
               <TextInput
+                {...INPUT_PROPS}
                 style={styles.input}
                 placeholder="Numéro du camion"
                 value={editingTruck}
@@ -543,6 +554,7 @@ export default function ChiefDashboardScreen({ navigation }) {
             )}
 
             <TextInput
+              {...INPUT_PROPS}
               style={styles.input}
               placeholder="Nouveau code PIN (optionnel)"
               value={editingPin}
@@ -605,6 +617,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           <Text style={styles.sectionTitle}>Paramètres structure</Text>
 
           <TextInput
+            {...INPUT_PROPS}
             style={styles.input}
             placeholder="Nom de la structure"
             value={structureName}
@@ -612,6 +625,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           />
 
           <TextInput
+            {...INPUT_PROPS}
             style={styles.input}
             placeholder="Code structure"
             value={structureCode}
@@ -636,6 +650,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           <Text style={styles.sectionTitle}>Créer un chauffeur</Text>
 
           <TextInput
+            {...INPUT_PROPS}
             style={styles.input}
             placeholder="Nom du chauffeur"
             value={driverName}
@@ -643,6 +658,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           />
 
           <TextInput
+            {...INPUT_PROPS}
             style={styles.input}
             placeholder="Téléphone du chauffeur"
             value={driverPhone}
@@ -651,6 +667,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           />
 
           <TextInput
+            {...INPUT_PROPS}
             style={styles.input}
             placeholder="Numéro du camion"
             value={driverTruck}
@@ -659,6 +676,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           />
 
           <TextInput
+            {...INPUT_PROPS}
             style={styles.input}
             placeholder="Code PIN chauffeur"
             value={driverPin}
@@ -684,6 +702,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           <Text style={styles.sectionTitle}>Créer un pompiste</Text>
 
           <TextInput
+            {...INPUT_PROPS}
             style={styles.input}
             placeholder="Nom du pompiste"
             value={pumpName}
@@ -691,6 +710,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           />
 
           <TextInput
+            {...INPUT_PROPS}
             style={styles.input}
             placeholder="Téléphone du pompiste"
             value={pumpPhone}
@@ -699,6 +719,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           />
 
           <TextInput
+            {...INPUT_PROPS}
             style={styles.input}
             placeholder="Code PIN pompiste"
             value={pumpPin}

@@ -1,12 +1,38 @@
 {
   "expo": {
-    "name": "fuel-management",
+    "name": "Fuel Manager",
     "slug": "fuel-management",
     "version": "1.0.0",
     "orientation": "portrait",
-    "assetBundlePatterns": ["**/*"],
+
+    "icon": "./assets/icon.png",
+
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#081B33"
+    },
+
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+
     "web": {
       "bundler": "metro"
+    },
+
+    "android": {
+      "package": "com.fousseni.fuelmanagement",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#081B33"
+      }
+    },
+
+    "extra": {
+      "eas": {
+        "projectId": "9e7fcb5d-a710-44d6-9fd1-c7851be50640"
+      }
     }
   }
 }

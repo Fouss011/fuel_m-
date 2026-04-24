@@ -11,18 +11,16 @@ import {
 } from 'react-native'
 import { api, setStoredSession } from '../api/client'
 
-function roleLabel(role) {
-  if (role === 'chief') return 'Chef'
-  if (role === 'driver') return 'Chauffeur'
-  if (role === 'pump_attendant') return 'Pompiste'
-  return 'Accès'
+const INPUT_PROPS = {
+  placeholderTextColor: '#64748B',
+  selectionColor: '#0F766E',
+  cursorColor: '#0F766E'
 }
 
 export default function PinAccessScreen({ route, navigation }) {
   const role = route?.params?.role || 'driver'
 
   const [mode, setMode] = useState(role === 'chief' ? 'login' : 'structure')
-
   const [loading, setLoading] = useState(false)
   const [loadingUsers, setLoadingUsers] = useState(false)
 
@@ -43,19 +41,14 @@ export default function PinAccessScreen({ route, navigation }) {
   const [createStructureCode, setCreateStructureCode] = useState('')
 
   useEffect(() => {
-    if (role === 'chief') {
-      setMode('login')
-    } else {
-      setMode('structure')
-    }
+    setMode(role === 'chief' ? 'login' : 'structure')
   }, [role])
 
   const screenConfig = useMemo(() => {
     if (role === 'chief') {
       return {
         title: 'Espace chef',
-        subtitle:
-          'Connecte-toi à ta structure ou crée ton compte pour démarrer.',
+        subtitle: 'Connecte-toi à ta structure ou crée ton compte pour démarrer.',
         accent: '#0F766E',
         badge: 'CHEF'
       }
@@ -64,8 +57,7 @@ export default function PinAccessScreen({ route, navigation }) {
     if (role === 'pump_attendant') {
       return {
         title: 'Accès pompiste',
-        subtitle:
-          'Entre le code structure, choisis ton profil puis confirme ton accès.',
+        subtitle: 'Entre le code structure, choisis ton profil puis confirme ton code PIN.',
         accent: '#B45309',
         badge: 'POMPISTE'
       }
@@ -73,8 +65,7 @@ export default function PinAccessScreen({ route, navigation }) {
 
     return {
       title: 'Accès chauffeur',
-      subtitle:
-        'Entre le code structure puis choisis ton nom pour accéder à ta page.',
+      subtitle: 'Entre le code structure, choisis ton nom puis confirme ton code PIN.',
       accent: '#2563EB',
       badge: 'CHAUFFEUR'
     }
@@ -155,6 +146,11 @@ export default function PinAccessScreen({ route, navigation }) {
       return
     }
 
+    if (!createStructureCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code structure.')
+      return
+    }
+
     if (!createPassword.trim()) {
       Alert.alert('Champ manquant', 'Entre le mot de passe.')
       return
@@ -162,11 +158,6 @@ export default function PinAccessScreen({ route, navigation }) {
 
     if (!createConfirmPassword.trim()) {
       Alert.alert('Champ manquant', 'Confirme le mot de passe.')
-      return
-    }
-
-    if (!createStructureCode.trim()) {
-      Alert.alert('Champ manquant', 'Entre le code structure.')
       return
     }
 
@@ -250,121 +241,121 @@ export default function PinAccessScreen({ route, navigation }) {
   }
 
   async function handleDriverAccess() {
-  if (!structureCode.trim()) {
-    Alert.alert('Champ manquant', 'Entre le code structure.')
-    return
-  }
-
-  if (!selectedUserId) {
-    Alert.alert('Champ manquant', 'Choisis ton nom dans la liste.')
-    return
-  }
-
-  if (!selectedUserPin.trim()) {
-    Alert.alert('Champ manquant', 'Entre le code PIN du chauffeur.')
-    return
-  }
-
-  try {
-    setLoading(true)
-
-    const response = await api.post('/auth/driver-access', {
-      structure_code: structureCode.trim().toUpperCase(),
-      driver_id: selectedUserId,
-      pin_code: selectedUserPin.trim()
-    })
-
-    const payload = response?.data?.data
-
-    if (!payload?.token || !payload?.session) {
-      throw new Error('Réponse chauffeur invalide')
+    if (!structureCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code structure.')
+      return
     }
 
-    await setStoredSession({
-      token: payload.token,
-      role: payload.session.role,
-      userId: payload.session.userId,
-      userName: payload.session.userName,
-      structureId: payload.session.structureId,
-      structureName: payload.session.structureName,
-      structureCode: payload.session.structureCode,
-      truckNumber: payload.session.truckNumber || null,
-      expiresAt: payload.expires_at
-    })
+    if (!selectedUserId) {
+      Alert.alert('Champ manquant', 'Choisis ton nom dans la liste.')
+      return
+    }
 
-    Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'DriverDashboard' }]
-    })
-  } catch (error) {
-    const message =
-      error?.response?.data?.message ||
-      error?.message ||
-      'Impossible d’ouvrir l’espace chauffeur.'
-    Alert.alert('Accès refusé', message)
-  } finally {
-    setLoading(false)
+    if (!selectedUserPin.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code PIN du chauffeur.')
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const response = await api.post('/auth/driver-access', {
+        structure_code: structureCode.trim().toUpperCase(),
+        driver_id: selectedUserId,
+        pin_code: selectedUserPin.trim()
+      })
+
+      const payload = response?.data?.data
+
+      if (!payload?.token || !payload?.session) {
+        throw new Error('Réponse chauffeur invalide')
+      }
+
+      await setStoredSession({
+        token: payload.token,
+        role: payload.session.role,
+        userId: payload.session.userId,
+        userName: payload.session.userName,
+        structureId: payload.session.structureId,
+        structureName: payload.session.structureName,
+        structureCode: payload.session.structureCode,
+        truckNumber: payload.session.truckNumber || null,
+        expiresAt: payload.expires_at
+      })
+
+      Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'DriverDashboard' }]
+      })
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible d’ouvrir l’espace chauffeur.'
+      Alert.alert('Accès refusé', message)
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   async function handlePumpAccess() {
-  if (!structureCode.trim()) {
-    Alert.alert('Champ manquant', 'Entre le code structure.')
-    return
-  }
-
-  if (!selectedUserId) {
-    Alert.alert('Champ manquant', 'Choisis ton profil pompiste.')
-    return
-  }
-
-  if (!selectedUserPin.trim()) {
-    Alert.alert('Champ manquant', 'Entre le code PIN du pompiste.')
-    return
-  }
-
-  try {
-    setLoading(true)
-
-    const response = await api.post('/auth/pump-access', {
-      structure_code: structureCode.trim().toUpperCase(),
-      pump_attendant_id: selectedUserId,
-      pin_code: selectedUserPin.trim()
-    })
-
-    const payload = response?.data?.data
-
-    if (!payload?.token || !payload?.session) {
-      throw new Error('Réponse pompiste invalide')
+    if (!structureCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code structure.')
+      return
     }
 
-    await setStoredSession({
-      token: payload.token,
-      role: payload.session.role,
-      userId: payload.session.userId,
-      userName: payload.session.userName,
-      structureId: payload.session.structureId,
-      structureName: payload.session.structureName,
-      structureCode: payload.session.structureCode,
-      expiresAt: payload.expires_at
-    })
+    if (!selectedUserId) {
+      Alert.alert('Champ manquant', 'Choisis ton profil pompiste.')
+      return
+    }
 
-    Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'PumpAttendantDashboard' }]
-    })
-  } catch (error) {
-    const message =
-      error?.response?.data?.message ||
-      error?.message ||
-      'Impossible d’ouvrir l’espace pompiste.'
-    Alert.alert('Accès refusé', message)
-  } finally {
-    setLoading(false)
+    if (!selectedUserPin.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code PIN du pompiste.')
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const response = await api.post('/auth/pump-access', {
+        structure_code: structureCode.trim().toUpperCase(),
+        pump_attendant_id: selectedUserId,
+        pin_code: selectedUserPin.trim()
+      })
+
+      const payload = response?.data?.data
+
+      if (!payload?.token || !payload?.session) {
+        throw new Error('Réponse pompiste invalide')
+      }
+
+      await setStoredSession({
+        token: payload.token,
+        role: payload.session.role,
+        userId: payload.session.userId,
+        userName: payload.session.userName,
+        structureId: payload.session.structureId,
+        structureName: payload.session.structureName,
+        structureCode: payload.session.structureCode,
+        expiresAt: payload.expires_at
+      })
+
+      Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'PumpAttendantDashboard' }]
+      })
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible d’ouvrir l’espace pompiste.'
+      Alert.alert('Accès refusé', message)
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   function renderChiefLogin() {
     return (
@@ -372,6 +363,7 @@ export default function PinAccessScreen({ route, navigation }) {
         <Text style={styles.blockTitle}>Se connecter</Text>
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Numéro du chef"
           value={chiefPhone}
@@ -381,6 +373,7 @@ export default function PinAccessScreen({ route, navigation }) {
         />
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Mot de passe"
           value={chiefPassword}
@@ -414,6 +407,7 @@ export default function PinAccessScreen({ route, navigation }) {
         <Text style={styles.blockTitle}>Créer un compte chef</Text>
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Nom de la structure"
           value={createName}
@@ -421,6 +415,7 @@ export default function PinAccessScreen({ route, navigation }) {
         />
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Nom du chef"
           value={createOwnerName}
@@ -428,6 +423,7 @@ export default function PinAccessScreen({ route, navigation }) {
         />
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Numéro du chef"
           value={createPhone}
@@ -436,6 +432,7 @@ export default function PinAccessScreen({ route, navigation }) {
         />
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Code structure (ex: TEMYA01)"
           value={createStructureCode}
@@ -444,6 +441,7 @@ export default function PinAccessScreen({ route, navigation }) {
         />
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Mot de passe"
           value={createPassword}
@@ -452,6 +450,7 @@ export default function PinAccessScreen({ route, navigation }) {
         />
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder="Confirmer le mot de passe"
           value={createConfirmPassword}
@@ -479,119 +478,122 @@ export default function PinAccessScreen({ route, navigation }) {
   }
 
   function renderStructureAccess() {
-  return (
-    <View style={styles.block}>
-      <Text style={styles.blockTitle}>Entrer le code structure</Text>
+    return (
+      <View style={styles.block}>
+        <Text style={styles.blockTitle}>Entrer le code structure</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Code structure"
-        value={structureCode}
-        onChangeText={(value) => {
-          setStructureCode(value.toUpperCase())
-          resetStructureFlow()
-        }}
-        autoCapitalize="characters"
-      />
+        <TextInput
+          {...INPUT_PROPS}
+          style={styles.input}
+          placeholder="Code structure"
+          value={structureCode}
+          onChangeText={(value) => {
+            setStructureCode(value.toUpperCase())
+            resetStructureFlow()
+          }}
+          autoCapitalize="characters"
+        />
 
-      <TouchableOpacity
-        style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
-        onPress={handleLoadStructureUsers}
-        disabled={loadingUsers}
-      >
-        {loadingUsers ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.primaryButtonText}>Charger les profils</Text>
-        )}
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
+          onPress={handleLoadStructureUsers}
+          disabled={loadingUsers}
+        >
+          {loadingUsers ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Charger les profils</Text>
+          )}
+        </TouchableOpacity>
 
-      {!!availableUsers.length && (
-        <View style={styles.selectionBox}>
-          <Text style={styles.selectionTitle}>
-            Choisis ton {role === 'pump_attendant' ? 'profil pompiste' : 'nom'}
-          </Text>
+        {!!availableUsers.length && (
+          <View style={styles.selectionBox}>
+            <Text style={styles.selectionTitle}>
+              Choisis ton {role === 'pump_attendant' ? 'profil pompiste' : 'nom'}
+            </Text>
 
-          {availableUsers.map((user) => {
-            const isSelected = selectedUserId === user.id
+            {availableUsers.map((user) => {
+              const isSelected = selectedUserId === user.id
 
-            return (
-              <TouchableOpacity
-                key={user.id}
-                style={[
-                  styles.userRow,
-                  isSelected && {
-                    borderColor: screenConfig.accent,
-                    backgroundColor: '#F8FBFF'
-                  }
-                ]}
-                onPress={() => handleSelectUser(user)}
-              >
-                <View style={styles.userRowLeft}>
-                  <Text style={styles.userName}>{user.name}</Text>
-                  {!!user.truck_number && (
-                    <Text style={styles.userMeta}>Camion : {user.truck_number}</Text>
-                  )}
-                  {!!user.phone && (
-                    <Text style={styles.userMeta}>Tél : {user.phone}</Text>
-                  )}
-                </View>
-
-                <View
+              return (
+                <TouchableOpacity
+                  key={user.id}
                   style={[
-                    styles.radio,
+                    styles.userRow,
                     isSelected && {
                       borderColor: screenConfig.accent,
-                      backgroundColor: screenConfig.accent
+                      backgroundColor: '#F8FBFF'
                     }
                   ]}
-                />
-              </TouchableOpacity>
-            )
-          })}
+                  onPress={() => handleSelectUser(user)}
+                >
+                  <View style={styles.userRowLeft}>
+                    <Text style={styles.userName}>{user.name}</Text>
+                    {!!user.truck_number && (
+                      <Text style={styles.userMeta}>Camion : {user.truck_number}</Text>
+                    )}
+                    {!!user.phone && (
+                      <Text style={styles.userMeta}>Tél : {user.phone}</Text>
+                    )}
+                  </View>
 
-          {role === 'driver' && (
-            <TextInput
-              style={styles.input}
-              placeholder="Code PIN chauffeur"
-              value={selectedUserPin}
-              onChangeText={setSelectedUserPin}
-              keyboardType="numeric"
-              secureTextEntry
-            />
-          )}
+                  <View
+                    style={[
+                      styles.radio,
+                      isSelected && {
+                        borderColor: screenConfig.accent,
+                        backgroundColor: screenConfig.accent
+                      }
+                    ]}
+                  />
+                </TouchableOpacity>
+              )
+            })}
 
-          {role === 'pump_attendant' && (
-            <TextInput
-              style={styles.input}
-              placeholder="Code PIN pompiste"
-              value={selectedUserPin}
-              onChangeText={setSelectedUserPin}
-              keyboardType="numeric"
-              secureTextEntry
-            />
-          )}
-
-          <TouchableOpacity
-            style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
-            onPress={role === 'pump_attendant' ? handlePumpAccess : handleDriverAccess}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.primaryButtonText}>
-                {role === 'pump_attendant'
-                  ? 'Ouvrir l’espace pompiste'
-                  : 'Ouvrir l’espace chauffeur'}
-              </Text>
+            {role === 'driver' && (
+              <TextInput
+                {...INPUT_PROPS}
+                style={styles.input}
+                placeholder="Code PIN chauffeur"
+                value={selectedUserPin}
+                onChangeText={setSelectedUserPin}
+                keyboardType="numeric"
+                secureTextEntry
+              />
             )}
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  )
-}
+
+            {role === 'pump_attendant' && (
+              <TextInput
+                {...INPUT_PROPS}
+                style={styles.input}
+                placeholder="Code PIN pompiste"
+                value={selectedUserPin}
+                onChangeText={setSelectedUserPin}
+                keyboardType="numeric"
+                secureTextEntry
+              />
+            )}
+
+            <TouchableOpacity
+              style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
+              onPress={role === 'pump_attendant' ? handlePumpAccess : handleDriverAccess}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {role === 'pump_attendant'
+                    ? 'Ouvrir l’espace pompiste'
+                    : 'Ouvrir l’espace chauffeur'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    )
+  }
 
   return (
     <ScrollView

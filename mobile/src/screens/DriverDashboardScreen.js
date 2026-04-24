@@ -18,6 +18,12 @@ import {
   clearSession
 } from '../api/client'
 
+const INPUT_PROPS = {
+  placeholderTextColor: '#64748B',
+  selectionColor: '#2563EB',
+  cursorColor: '#2563EB'
+}
+
 const FUEL_OPTIONS = [
   { key: 'gasoil', label: 'Gasoil' },
   { key: 'essence', label: 'Essence' }
@@ -104,16 +110,16 @@ export default function DriverDashboardScreen({ navigation }) {
   }
 
   async function handleLogout() {
-  try {
-    await clearSession()
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Home' }]
-    })
-  } catch (error) {
-    Alert.alert('Erreur', 'Impossible de se déconnecter.')
+    try {
+      await clearSession()
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }]
+      })
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de se déconnecter.')
+    }
   }
-}
 
   const stats = useMemo(() => {
     const total = requests.length
@@ -222,6 +228,7 @@ export default function DriverDashboardScreen({ navigation }) {
             </View>
 
             <TextInput
+              {...INPUT_PROPS}
               style={styles.input}
               placeholder="Quantité demandée en litres"
               value={requestedLiters}

@@ -18,6 +18,12 @@ import {
   clearSession
 } from '../api/client'
 
+const INPUT_PROPS = {
+  placeholderTextColor: '#64748B',
+  selectionColor: '#B45309',
+  cursorColor: '#B45309'
+}
+
 export default function PumpAttendantDashboardScreen({ navigation }) {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -62,70 +68,67 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
   }
 
   async function handleServe(item) {
-  const rawValue = servedValues[item.id]
+    const rawValue = servedValues[item.id]
 
-  if (!rawValue?.trim()) {
-    Alert.alert('Champ manquant', 'Entre la quantité réellement servie.')
-    return
+    if (!rawValue?.trim()) {
+      Alert.alert('Champ manquant', 'Entre la quantité réellement servie.')
+      return
+    }
+
+    const liters = Number(rawValue)
+
+    if (Number.isNaN(liters) || liters <= 0) {
+      Alert.alert('Valeur invalide', 'Entre une quantité correcte.')
+      return
+    }
+
+    if (liters > Number(item.approved_liters || 0)) {
+      Alert.alert(
+        'Quantité trop élevée',
+        `Tu ne peux pas servir plus de ${item.approved_liters} L validés par le chef.`
+      )
+      return
+    }
+
+    try {
+      setServingId(item.id)
+
+      await serveFuelRequest(item.id, {
+        served_liters: liters
+      })
+
+      Alert.alert('Succès', 'Le service a été confirmé.')
+
+      setServedValues((prev) => ({
+        ...prev,
+        [item.id]: ''
+      }))
+
+      await loadPumpDashboard()
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Impossible de confirmer le service.'
+
+      Alert.alert('Erreur', message)
+    } finally {
+      setServingId(null)
+    }
   }
-
-  const liters = Number(rawValue)
-
-  if (Number.isNaN(liters) || liters <= 0) {
-    Alert.alert('Valeur invalide', 'Entre une quantité correcte.')
-    return
-  }
-
-  if (liters > Number(item.approved_liters || 0)) {
-    Alert.alert(
-      'Quantité trop élevée',
-      `Tu ne peux pas servir plus de ${item.approved_liters} L validés par le chef.`
-    )
-    return
-  }
-
-  try {
-    setServingId(item.id)
-
-    const response = await serveFuelRequest(item.id, {
-      served_liters: liters
-    })
-
-    console.log('SERVICE RESPONSE =>', response)
-
-    Alert.alert('Succès', 'Le service a été confirmé.')
-
-    setServedValues((prev) => ({
-      ...prev,
-      [item.id]: ''
-    }))
-
-    await loadPumpDashboard()
-  } catch (error) {
-    console.log('SERVICE ERROR =>', error?.response?.data || error?.message || error)
-
-    const message =
-      error?.response?.data?.message ||
-      error?.message ||
-      'Impossible de confirmer le service.'
-
-    Alert.alert('Erreur', message)
-  } finally {
-    setServingId(null)
-  }
-}
 
   async function handleLogout() {
-  try {
-    await clearSession()
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Home' }]
-    })
-  } catch (error) {
-    Alert.alert('Erreur', 'Impossible de se déconnecter.')
+    try {
+      await clearSession()
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }]
+      })
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de se déconnecter.')
+    }
   }
-}
 
   const stats = useMemo(() => {
     const total = requests.length
@@ -165,6 +168,7 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
         </View>
 
         <TextInput
+          {...INPUT_PROPS}
           style={styles.input}
           placeholder={`Servi (max ${item.approved_liters} L)`}
           keyboardType="numeric"
