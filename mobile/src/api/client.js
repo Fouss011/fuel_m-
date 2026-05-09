@@ -179,4 +179,19 @@ export async function deactivateUser(id) {
   return response.data
 }
 
+export async function stationLogin(payload) {
+  const response = await api.post('/station/login', payload)
+  return response.data
+}
+
+export async function getStationTransactions(params = {}) {
+  const response = await api.get('/station/transactions', { params })
+  return response.data
+}
+
+export async function getStationSummary(params = {}) {
+  const response = await api.get('/station/summary', { params })
+  return response.data
+}
+
 export default api

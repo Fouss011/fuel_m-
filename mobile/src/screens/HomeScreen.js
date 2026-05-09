@@ -11,12 +11,11 @@ import {
 import { useFocusEffect } from '@react-navigation/native'
 import { clearSession, getStoredSession } from '../api/client'
 
-const PUBLIC_CARDS = [
+const COMPANY_CARDS = [
   {
     key: 'chief',
     title: 'Chef',
-    subtitle:
-      'Créer un compte, se connecter, gérer la structure, les chauffeurs et les pompistes.',
+    subtitle: 'Créer et piloter une structure, gérer les chauffeurs, pompistes et demandes.',
     emoji: '🧾',
     accent: '#0F766E',
     soft: '#CCFBF1',
@@ -26,8 +25,7 @@ const PUBLIC_CARDS = [
   {
     key: 'driver',
     title: 'Chauffeur',
-    subtitle:
-      'Entrer le code structure, choisir son nom puis entrer son code PIN.',
+    subtitle: 'Entrer dans sa structure, créer une demande et suivre son statut.',
     emoji: '🚛',
     accent: '#2563EB',
     soft: '#DBEAFE',
@@ -37,8 +35,7 @@ const PUBLIC_CARDS = [
   {
     key: 'pump',
     title: 'Pompiste',
-    subtitle:
-      'Entrer le code structure, choisir son profil puis entrer son code PIN.',
+    subtitle: 'Valider les approvisionnements autorisés et enregistrer les litres servis.',
     emoji: '⛽',
     accent: '#B45309',
     soft: '#FEF3C7',
@@ -47,11 +44,22 @@ const PUBLIC_CARDS = [
   }
 ]
 
-function PublicCard({ item, navigation }) {
+const STATION_CARD = {
+  key: 'station',
+  title: 'Responsable station',
+  subtitle: 'Voir les chauffeurs passés, les sociétés, les litres servis et les montants.',
+  emoji: '🏪',
+  accent: '#7C3AED',
+  soft: '#EDE9FE',
+  route: 'StationLogin',
+  params: {}
+}
+
+function AccessCard({ item, navigation, featured = false }) {
   return (
     <TouchableOpacity
-      activeOpacity={0.92}
-      style={styles.card}
+      activeOpacity={0.9}
+      style={[styles.card, featured && styles.stationCard]}
       onPress={() => navigation.navigate(item.route, item.params)}
     >
       <View style={[styles.iconWrap, { backgroundColor: item.soft }]}>
@@ -66,7 +74,7 @@ function PublicCard({ item, navigation }) {
 
         <View style={styles.cardFooter}>
           <View style={[styles.dot, { backgroundColor: item.accent }]} />
-          <Text style={styles.cardAction}>Continuer</Text>
+          <Text style={styles.cardAction}>Accéder</Text>
         </View>
       </View>
 
@@ -89,14 +97,8 @@ export default function HomeScreen({ navigation }) {
     try {
       setLoadingSession(true)
       const storedSession = await getStoredSession()
-
-      if (storedSession?.token && storedSession?.role) {
-        setSession(storedSession)
-      } else {
-        setSession(null)
-      }
+      setSession(storedSession?.token && storedSession?.role ? storedSession : null)
     } catch (error) {
-      console.log('Erreur chargement session home:', error?.message || error)
       setSession(null)
     } finally {
       setLoadingSession(false)
@@ -110,12 +112,10 @@ export default function HomeScreen({ navigation }) {
       return {
         badge: 'SESSION CHEF',
         title: session.structureName
-          ? `Reprendre la structure ${session.structureName}`
+          ? `Reprendre ${session.structureName}`
           : 'Reprendre ma session chef',
-        subtitle:
-          'Tu es déjà connecté sur cet appareil. Tu peux reprendre directement ton espace chef.',
+        subtitle: 'Une session chef est déjà active sur cet appareil.',
         primaryText: 'Reprendre mon espace',
-        secondaryText: 'Se déconnecter',
         accent: '#0F766E',
         soft: '#CCFBF1',
         icon: '🧾',
@@ -127,12 +127,10 @@ export default function HomeScreen({ navigation }) {
       return {
         badge: 'SESSION CHAUFFEUR',
         title: session.structureName
-          ? `Reprendre l’espace chauffeur de ${session.structureName}`
+          ? `Reprendre ${session.structureName}`
           : 'Reprendre ma session chauffeur',
-        subtitle:
-          'La session chauffeur est déjà active sur cet appareil.',
+        subtitle: 'Une session chauffeur est déjà active sur cet appareil.',
         primaryText: 'Reprendre ma session',
-        secondaryText: 'Se déconnecter',
         accent: '#2563EB',
         soft: '#DBEAFE',
         icon: '🚛',
@@ -144,12 +142,10 @@ export default function HomeScreen({ navigation }) {
       return {
         badge: 'SESSION POMPISTE',
         title: session.structureName
-          ? `Reprendre l’espace pompiste de ${session.structureName}`
+          ? `Reprendre ${session.structureName}`
           : 'Reprendre ma session pompiste',
-        subtitle:
-          'La session pompiste est déjà active sur cet appareil.',
+        subtitle: 'Une session pompiste est déjà active sur cet appareil.',
         primaryText: 'Reprendre ma session',
-        secondaryText: 'Se déconnecter',
         accent: '#B45309',
         soft: '#FEF3C7',
         icon: '⛽',
@@ -164,9 +160,9 @@ export default function HomeScreen({ navigation }) {
     try {
       await clearSession()
       setSession(null)
-      Alert.alert('Déconnecté', 'La session a bien été supprimée de cet appareil.')
+      Alert.alert('Déconnecté', 'La session a bien été supprimée.')
     } catch (error) {
-      Alert.alert('Erreur', 'Impossible de fermer la session pour le moment.')
+      Alert.alert('Erreur', 'Impossible de fermer la session.')
     }
   }
 
@@ -181,48 +177,36 @@ export default function HomeScreen({ navigation }) {
 
   if (sessionLabel) {
     return (
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.introCard}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>Gestion carburant</Text>
-          </View>
-
-          <Text style={styles.title}>Session détectée</Text>
-          <Text style={styles.subtitle}>
-            Cet appareil possède déjà une session active. Tu peux reprendre directement ton espace.
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.hero}>
+          <Text style={styles.heroBadge}>Gestion carburant</Text>
+          <Text style={styles.heroTitle}>Session détectée</Text>
+          <Text style={styles.heroText}>
+            Tu peux reprendre ton espace directement ou fermer la session.
           </Text>
         </View>
 
         <View style={styles.sessionCard}>
-          <View style={[styles.sessionIconWrap, { backgroundColor: sessionLabel.soft }]}>
-            <View style={[styles.sessionIconInner, { backgroundColor: sessionLabel.accent }]}>
-              <Text style={styles.sessionIconText}>{sessionLabel.icon}</Text>
+          <View style={[styles.iconWrap, { backgroundColor: sessionLabel.soft }]}>
+            <View style={[styles.iconInner, { backgroundColor: sessionLabel.accent }]}>
+              <Text style={styles.iconText}>{sessionLabel.icon}</Text>
             </View>
           </View>
 
-          <View style={styles.sessionBody}>
-            <Text style={styles.sessionBadge}>{sessionLabel.badge}</Text>
-            <Text style={styles.sessionTitle}>{sessionLabel.title}</Text>
-            <Text style={styles.sessionSubtitle}>{sessionLabel.subtitle}</Text>
+          <Text style={styles.sessionBadge}>{sessionLabel.badge}</Text>
+          <Text style={styles.sessionTitle}>{sessionLabel.title}</Text>
+          <Text style={styles.sessionSubtitle}>{sessionLabel.subtitle}</Text>
 
-            <TouchableOpacity
-              style={[styles.primaryButton, { backgroundColor: sessionLabel.accent }]}
-              onPress={() => navigation.navigate(sessionLabel.targetScreen)}
-            >
-              <Text style={styles.primaryButtonText}>{sessionLabel.primaryText}</Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: sessionLabel.accent }]}
+            onPress={() => navigation.navigate(sessionLabel.targetScreen)}
+          >
+            <Text style={styles.primaryButtonText}>{sessionLabel.primaryText}</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={handleLogout}
-            >
-              <Text style={styles.secondaryButtonText}>{sessionLabel.secondaryText}</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.secondaryButton} onPress={handleLogout}>
+            <Text style={styles.secondaryButtonText}>Se déconnecter</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     )
@@ -234,29 +218,47 @@ export default function HomeScreen({ navigation }) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.introCard}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Plateforme métier</Text>
-        </View>
-
-        <Text style={styles.title}>Gestion carburant</Text>
-        <Text style={styles.subtitle}>
-          Choisis ton profil pour accéder à ton espace. Chaque structure reste séparée et chaque
-          utilisateur travaille dans le bon environnement.
+      <View style={styles.hero}>
+        <Text style={styles.heroBadge}>Plateforme professionnelle</Text>
+        <Text style={styles.heroTitle}>Gestion carburant</Text>
+        <Text style={styles.heroText}>
+          Pilote les demandes, les validations et les approvisionnements avec un suivi clair par rôle.
         </Text>
+
+        <View style={styles.heroStats}>
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatNumber}>3</Text>
+            <Text style={styles.heroStatLabel}>rôles société</Text>
+          </View>
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatNumber}>1</Text>
+            <Text style={styles.heroStatLabel}>suivi station</Text>
+          </View>
+        </View>
       </View>
 
+      <Text style={styles.sectionTitle}>Gestion société</Text>
+      <Text style={styles.sectionText}>
+        Les chefs, chauffeurs et pompistes travaillent dans l’environnement de leur structure.
+      </Text>
+
       <View style={styles.cardsList}>
-        {PUBLIC_CARDS.map((item) => (
-          <PublicCard key={item.key} item={item} navigation={navigation} />
+        {COMPANY_CARDS.map((item) => (
+          <AccessCard key={item.key} item={item} navigation={navigation} />
         ))}
       </View>
 
+      <Text style={[styles.sectionTitle, styles.stationSectionTitle]}>Suivi station</Text>
+      <Text style={styles.sectionText}>
+        Espace dédié au responsable station pour consulter les mouvements carburant.
+      </Text>
+
+      <AccessCard item={STATION_CARD} navigation={navigation} featured />
+
       <View style={styles.footerCard}>
-        <Text style={styles.footerTitle}>Connexion simplifiée</Text>
+        <Text style={styles.footerTitle}>Séparation claire des accès</Text>
         <Text style={styles.footerText}>
-          Le chef crée la structure. Les chauffeurs et pompistes entrent ensuite dans la bonne
-          structure avec le code fourni par leur chef.
+          La société gère les demandes. La station consulte uniquement les transactions servies.
         </Text>
       </View>
     </ScrollView>
@@ -266,15 +268,15 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F7FB'
+    backgroundColor: '#EEF4FA'
   },
   content: {
     padding: 18,
-    paddingBottom: 28
+    paddingBottom: 34
   },
   center: {
     flex: 1,
-    backgroundColor: '#F3F7FB',
+    backgroundColor: '#EEF4FA',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24
@@ -282,60 +284,105 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 14,
     fontSize: 15,
-    color: '#516173',
-    textAlign: 'center'
+    color: '#536273'
   },
-  introCard: {
-    backgroundColor: '#081B33',
-    borderRadius: 24,
-    padding: 22,
-    marginBottom: 18
+  hero: {
+    backgroundColor: '#061A2F',
+    borderRadius: 30,
+    padding: 24,
+    marginBottom: 24,
+    shadowColor: '#061A2F',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5
   },
-  badge: {
+  heroBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    color: '#FFFFFF',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 14
-  },
-  badgeText: {
-    color: '#FFFFFF',
+    paddingVertical: 7,
+    borderRadius: 999,
     fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase'
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 16
   },
-  title: {
+  heroTitle: {
     color: '#FFFFFF',
-    fontSize: 28,
+    fontSize: 31,
     fontWeight: '900',
     marginBottom: 10
   },
-  subtitle: {
-    color: '#D6E2F0',
+  heroText: {
+    color: '#D7E4F2',
     fontSize: 15,
     lineHeight: 22
+  },
+  heroStats: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20
+  },
+  heroStat: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 18,
+    padding: 14
+  },
+  heroStatNumber: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '900'
+  },
+  heroStatLabel: {
+    color: '#C8D8EA',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#071C33',
+    marginBottom: 5
+  },
+  stationSectionTitle: {
+    marginTop: 24
+  },
+  sectionText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#5F6E7D',
+    marginBottom: 12
   },
   cardsList: {
     gap: 14
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#081B33',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2
+    shadowColor: '#071C33',
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E1EAF3'
+  },
+  stationCard: {
+    borderColor: '#C4B5FD',
+    backgroundColor: '#FFFFFF'
   },
   iconWrap: {
     width: 66,
     height: 66,
-    borderRadius: 18,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14
@@ -343,31 +390,31 @@ const styles = StyleSheet.create({
   iconInner: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center'
   },
   iconText: {
-    fontSize: 22
+    fontSize: 23
   },
   cardBody: {
     flex: 1
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '800',
-    color: '#081B33',
-    marginBottom: 6
+    fontWeight: '900',
+    color: '#071C33',
+    marginBottom: 5
   },
   cardSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13.5,
+    lineHeight: 19,
     color: '#536273'
   },
   cardFooter: {
-    marginTop: 10,
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginTop: 10
   },
   dot: {
     width: 8,
@@ -377,26 +424,26 @@ const styles = StyleSheet.create({
   },
   cardAction: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#081B33'
+    fontWeight: '900',
+    color: '#071C33'
   },
   chevron: {
-    fontSize: 28,
-    color: '#9AA8B6',
-    marginLeft: 10
+    fontSize: 30,
+    color: '#A2AFBD',
+    marginLeft: 8
   },
   footerCard: {
-    marginTop: 18,
+    marginTop: 22,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 22,
+    padding: 17,
     borderWidth: 1,
-    borderColor: '#E4EBF3'
+    borderColor: '#E1EAF3'
   },
   footerTitle: {
     fontSize: 16,
-    fontWeight: '800',
-    color: '#081B33',
+    fontWeight: '900',
+    color: '#071C33',
     marginBottom: 6
   },
   footerText: {
@@ -406,47 +453,22 @@ const styles = StyleSheet.create({
   },
   sessionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 18,
-    shadowColor: '#081B33',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2
-  },
-  sessionIconWrap: {
-    width: 74,
-    height: 74,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16
-  },
-  sessionIconInner: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  sessionIconText: {
-    fontSize: 24
-  },
-  sessionBody: {
-    width: '100%'
+    borderRadius: 26,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#E1EAF3'
   },
   sessionBadge: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#5F6E7D',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
+    color: '#64748B',
+    letterSpacing: 0.7,
     marginBottom: 8
   },
   sessionTitle: {
-    fontSize: 22,
+    fontSize: 23,
     fontWeight: '900',
-    color: '#081B33',
+    color: '#071C33',
     marginBottom: 8
   },
   sessionSubtitle: {
@@ -459,24 +481,22 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 10
   },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '800'
+    fontWeight: '900'
   },
   secondaryButton: {
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#EEF3F8'
   },
   secondaryButtonText: {
-    color: '#081B33',
+    color: '#071C33',
     fontSize: 15,
-    fontWeight: '800'
+    fontWeight: '900'
   }
 })

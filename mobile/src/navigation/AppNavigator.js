@@ -5,6 +5,8 @@ import PinAccessScreen from '../screens/PinAccessScreen'
 import DriverDashboardScreen from '../screens/DriverDashboardScreen'
 import ChiefDashboardScreen from '../screens/ChiefDashboardScreen'
 import PumpAttendantDashboardScreen from '../screens/PumpAttendantDashboardScreen'
+import StationLoginScreen from '../screens/StationLoginScreen'
+import StationTransactionsScreen from '../screens/StationTransactionsScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -58,6 +60,18 @@ export default function AppNavigator() {
         name="PumpAttendantDashboard"
         component={PumpAttendantDashboardScreen}
         options={{ title: 'Espace pompiste' }}
+      />
+
+      <Stack.Screen
+        name="StationLogin"
+        component={StationLoginScreen}
+        options={{ title: 'Accès station' }}
+      />
+
+      <Stack.Screen
+        name="StationTransactions"
+        component={StationTransactionsScreen}
+        options={{ title: 'Transactions station' }}
       />
     </Stack.Navigator>
   )

@@ -7,6 +7,7 @@ import authRoutes from './routes/authRoutes.js'
 import fuelRequestRoutes from './routes/fuelRequestRoutes.js'
 import structureRoutes from './routes/structureRoutes.js'
 import userRoutes from './routes/userRoutes.js'
+import stationRoutes from './routes/stationRoutes.js'
 import { notFound } from './middleware/notFound.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
@@ -25,6 +26,7 @@ app.use(
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(morgan('dev'))
+app.use('/api/station', stationRoutes)
 
 app.use((req, res, next) => {
   res.setHeader(
@@ -71,6 +73,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/fuel-requests', fuelRequestRoutes)
 app.use('/api/structures', structureRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/station', stationRoutes)
 
 app.use(notFound)
 app.use(errorHandler)
