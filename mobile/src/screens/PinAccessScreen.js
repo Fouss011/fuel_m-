@@ -57,7 +57,7 @@ export default function PinAccessScreen({ route, navigation }) {
     if (role === 'pump_attendant') {
       return {
         title: 'Accès pompiste',
-        subtitle: 'Entre le code structure, choisis ton profil puis confirme ton code PIN.',
+        subtitle: 'Entre le code station, choisis ton profil puis confirme ton code PIN.',
         accent: '#B45309',
         badge: 'POMPISTE'
       }
@@ -108,9 +108,12 @@ export default function PinAccessScreen({ route, navigation }) {
         role: payload.session.role,
         userId: payload.session.userId,
         userName: payload.session.userName,
-        structureId: payload.session.structureId,
-        structureName: payload.session.structureName,
-        structureCode: payload.session.structureCode,
+        structureId: payload.session.structureId || null,
+        structureName: payload.session.structureName || null,
+        structureCode: payload.session.structureCode || null,
+        stationId: payload.session.stationId || payload.session.station_id || null,
+        stationName: payload.session.stationName || payload.session.station_name || null,
+        stationCode: payload.session.stationCode || payload.session.station_code || structureCode.trim().toUpperCase(),
         expiresAt: payload.expires_at
       })
 
@@ -147,7 +150,7 @@ export default function PinAccessScreen({ route, navigation }) {
     }
 
     if (!createStructureCode.trim()) {
-      Alert.alert('Champ manquant', 'Entre le code structure.')
+      Alert.alert('Champ manquant', role === 'pump_attendant' ? 'Entre le code station.' : 'Entre le code structure.')
       return
     }
 
@@ -194,7 +197,7 @@ export default function PinAccessScreen({ route, navigation }) {
 
   async function handleLoadStructureUsers() {
     if (!structureCode.trim()) {
-      Alert.alert('Champ manquant', 'Entre le code structure.')
+      Alert.alert('Champ manquant', role === 'pump_attendant' ? 'Entre le code station.' : 'Entre le code structure.')
       return
     }
 
@@ -204,17 +207,18 @@ export default function PinAccessScreen({ route, navigation }) {
 
       const normalizedCode = structureCode.trim().toUpperCase()
       const roleQuery = role === 'pump_attendant' ? 'pump_attendant' : 'driver'
+      const endpoint = role === 'pump_attendant'
+        ? `/auth/station-users/${normalizedCode}?role=${roleQuery}`
+        : `/auth/structure-users/${normalizedCode}?role=${roleQuery}`
 
-      const response = await api.get(
-        `/auth/structure-users/${normalizedCode}?role=${roleQuery}`
-      )
+      const response = await api.get(endpoint)
 
       const users = response?.data?.data?.users || []
 
       if (!users.length) {
         Alert.alert(
           'Aucun profil trouvé',
-          `Aucun ${role === 'pump_attendant' ? 'pompiste' : 'chauffeur'} actif trouvé pour cette structure.`
+          `Aucun ${role === 'pump_attendant' ? 'pompiste actif trouvé pour cette station' : 'chauffeur actif trouvé pour cette structure'}.`
         )
         return
       }
@@ -227,7 +231,7 @@ export default function PinAccessScreen({ route, navigation }) {
       const message =
         error?.response?.data?.message ||
         error?.message ||
-        'Impossible de charger les profils de cette structure.'
+        role === 'pump_attendant' ? 'Impossible de charger les profils de cette station.' : 'Impossible de charger les profils de cette structure.'
       Alert.alert('Accès impossible', message)
     } finally {
       setLoadingUsers(false)
@@ -242,7 +246,7 @@ export default function PinAccessScreen({ route, navigation }) {
 
   async function handleDriverAccess() {
     if (!structureCode.trim()) {
-      Alert.alert('Champ manquant', 'Entre le code structure.')
+      Alert.alert('Champ manquant', role === 'pump_attendant' ? 'Entre le code station.' : 'Entre le code structure.')
       return
     }
 
@@ -276,9 +280,12 @@ export default function PinAccessScreen({ route, navigation }) {
         role: payload.session.role,
         userId: payload.session.userId,
         userName: payload.session.userName,
-        structureId: payload.session.structureId,
-        structureName: payload.session.structureName,
-        structureCode: payload.session.structureCode,
+        structureId: payload.session.structureId || null,
+        structureName: payload.session.structureName || null,
+        structureCode: payload.session.structureCode || null,
+        stationId: payload.session.stationId || payload.session.station_id || null,
+        stationName: payload.session.stationName || payload.session.station_name || null,
+        stationCode: payload.session.stationCode || payload.session.station_code || structureCode.trim().toUpperCase(),
         truckNumber: payload.session.truckNumber || null,
         expiresAt: payload.expires_at
       })
@@ -301,7 +308,7 @@ export default function PinAccessScreen({ route, navigation }) {
 
   async function handlePumpAccess() {
     if (!structureCode.trim()) {
-      Alert.alert('Champ manquant', 'Entre le code structure.')
+      Alert.alert('Champ manquant', role === 'pump_attendant' ? 'Entre le code station.' : 'Entre le code structure.')
       return
     }
 
@@ -319,7 +326,7 @@ export default function PinAccessScreen({ route, navigation }) {
       setLoading(true)
 
       const response = await api.post('/auth/pump-access', {
-        structure_code: structureCode.trim().toUpperCase(),
+        station_code: structureCode.trim().toUpperCase(),
         pump_attendant_id: selectedUserId,
         pin_code: selectedUserPin.trim()
       })
@@ -335,9 +342,12 @@ export default function PinAccessScreen({ route, navigation }) {
         role: payload.session.role,
         userId: payload.session.userId,
         userName: payload.session.userName,
-        structureId: payload.session.structureId,
-        structureName: payload.session.structureName,
-        structureCode: payload.session.structureCode,
+        structureId: payload.session.structureId || null,
+        structureName: payload.session.structureName || null,
+        structureCode: payload.session.structureCode || null,
+        stationId: payload.session.stationId || payload.session.station_id || null,
+        stationName: payload.session.stationName || payload.session.station_name || null,
+        stationCode: payload.session.stationCode || payload.session.station_code || structureCode.trim().toUpperCase(),
         expiresAt: payload.expires_at
       })
 
@@ -480,12 +490,12 @@ export default function PinAccessScreen({ route, navigation }) {
   function renderStructureAccess() {
     return (
       <View style={styles.block}>
-        <Text style={styles.blockTitle}>Entrer le code structure</Text>
+        <Text style={styles.blockTitle}>{role === 'pump_attendant' ? 'Entrer le code station' : 'Entrer le code structure'}</Text>
 
         <TextInput
           {...INPUT_PROPS}
           style={styles.input}
-          placeholder="Code structure"
+          placeholder={role === 'pump_attendant' ? 'Code station' : 'Code structure'}
           value={structureCode}
           onChangeText={(value) => {
             setStructureCode(value.toUpperCase())
@@ -502,7 +512,7 @@ export default function PinAccessScreen({ route, navigation }) {
           {loadingUsers ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.primaryButtonText}>Charger les profils</Text>
+            <Text style={styles.primaryButtonText}>{role === 'pump_attendant' ? 'Charger les pompistes' : 'Charger les profils'}</Text>
           )}
         </TouchableOpacity>
 
@@ -627,7 +637,7 @@ export default function PinAccessScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F7FB'
+    backgroundColor: 'transparent'
   },
   content: {
     padding: 18,

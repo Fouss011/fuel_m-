@@ -13,12 +13,11 @@ import {
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import {
-  approveFuelRequest,
+  api,
   rejectFuelRequest,
   fetchFuelRequests,
   fetchStructureUsers,
   createDriverUser,
-  createPumpAttendantUser,
   updateUser,
   deactivateUser,
   updateStructure,
@@ -50,10 +49,10 @@ export default function ChiefDashboardScreen({ navigation }) {
 
   const [session, setSession] = useState(null)
   const [drivers, setDrivers] = useState([])
-  const [pumpAttendants, setPumpAttendants] = useState([])
+  const [partnerStations, setPartnerStations] = useState([])
+  const [selectedStationByRequest, setSelectedStationByRequest] = useState({})
 
   const [creatingDriver, setCreatingDriver] = useState(false)
-  const [creatingPump, setCreatingPump] = useState(false)
   const [savingStructure, setSavingStructure] = useState(false)
 
   const [structureName, setStructureName] = useState('')
@@ -64,10 +63,6 @@ export default function ChiefDashboardScreen({ navigation }) {
   const [driverTruck, setDriverTruck] = useState('')
   const [driverPin, setDriverPin] = useState('')
 
-  const [pumpName, setPumpName] = useState('')
-  const [pumpPhone, setPumpPhone] = useState('')
-  const [pumpPin, setPumpPin] = useState('')
-
   const [editingUserId, setEditingUserId] = useState(null)
   const [editingName, setEditingName] = useState('')
   const [editingPhone, setEditingPhone] = useState('')
@@ -77,7 +72,7 @@ export default function ChiefDashboardScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       loadAll()
-    }, [])
+    }, [activeStatus])
   )
 
   async function loadAll() {
@@ -88,29 +83,31 @@ export default function ChiefDashboardScreen({ navigation }) {
       setSession(storedSession || null)
 
       const status = activeStatus === 'all' ? undefined : activeStatus
+      const structureId = storedSession?.structureId || storedSession?.structure_id
 
-      const [requestsRes, driversRes, pumpsRes] = await Promise.all([
+      const [requestsRes, driversRes, partnersRes] = await Promise.all([
         fetchFuelRequests(status),
-        storedSession?.structureId
-          ? fetchStructureUsers(storedSession.structureId, 'driver')
+        structureId
+          ? fetchStructureUsers(structureId, 'driver')
           : Promise.resolve({ data: { users: [] } }),
-        storedSession?.structureId
-          ? fetchStructureUsers(storedSession.structureId, 'pump_attendant')
-          : Promise.resolve({ data: { users: [] } })
+        structureId
+          ? api.get(`/structures/${structureId}/partner-stations`)
+          : Promise.resolve({ data: { data: [] } })
       ])
 
       setRequests(requestsRes?.data || [])
       setDrivers(driversRes?.data?.users || [])
-      setPumpAttendants(pumpsRes?.data?.users || [])
+      setPartnerStations(partnersRes?.data?.data || [])
 
       setStructureName(storedSession?.structureName || '')
       setStructureCode(storedSession?.structureCode || '')
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de charger le tableau de bord du chef.'
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible de charger le tableau de bord du chef.'
+      )
     } finally {
       setLoading(false)
     }
@@ -123,11 +120,12 @@ export default function ChiefDashboardScreen({ navigation }) {
       const response = await fetchFuelRequests(status)
       setRequests(response?.data || [])
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible d’actualiser les demandes.'
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible d’actualiser les demandes.'
+      )
     } finally {
       setLoading(false)
     }
@@ -152,17 +150,38 @@ export default function ChiefDashboardScreen({ navigation }) {
   }, [requests, driverFilter, truckFilter])
 
   async function handleApprove(item) {
+    const stationId = selectedStationByRequest[item.id]
+
+    if (!stationId) {
+      Alert.alert(
+        'Station obligatoire',
+        'Choisis d’abord la station partenaire qui va servir cette demande.'
+      )
+      return
+    }
+
     try {
       setLoading(true)
-      await approveFuelRequest(item.id, item.requested_liters)
-      Alert.alert('Succès', 'Demande validée avec succès.')
+
+      await api.patch(`/fuel-requests/${item.id}/approve`, {
+        approved_liters: item.requested_liters,
+        station_id: stationId
+      })
+
+      Alert.alert('Succès', 'Demande validée et envoyée à la station.')
+      setSelectedStationByRequest((prev) => {
+        const next = { ...prev }
+        delete next[item.id]
+        return next
+      })
       await loadAll()
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de valider la demande.'
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible de valider la demande.'
+      )
     } finally {
       setLoading(false)
     }
@@ -175,18 +194,21 @@ export default function ChiefDashboardScreen({ navigation }) {
       Alert.alert('Succès', 'Demande refusée.')
       await loadAll()
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de refuser la demande.'
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible de refuser la demande.'
+      )
     } finally {
       setLoading(false)
     }
   }
 
   async function handleCreateDriver() {
-    if (!session?.structureId) {
+    const structureId = session?.structureId || session?.structure_id
+
+    if (!structureId) {
       Alert.alert('Erreur', 'Structure chef introuvable.')
       return
     }
@@ -210,7 +232,7 @@ export default function ChiefDashboardScreen({ navigation }) {
       setCreatingDriver(true)
 
       await createDriverUser({
-        structure_id: session.structureId,
+        structure_id: structureId,
         name: driverName.trim(),
         phone: driverPhone.trim() || null,
         truck_number: driverTruck.trim().toUpperCase(),
@@ -224,60 +246,21 @@ export default function ChiefDashboardScreen({ navigation }) {
       setDriverPin('')
       await loadAll()
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de créer le chauffeur.'
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible de créer le chauffeur.'
+      )
     } finally {
       setCreatingDriver(false)
     }
   }
 
-  async function handleCreatePump() {
-    if (!session?.structureId) {
-      Alert.alert('Erreur', 'Structure chef introuvable.')
-      return
-    }
-
-    if (!pumpName.trim()) {
-      Alert.alert('Champ manquant', 'Entre le nom du pompiste.')
-      return
-    }
-
-    if (!pumpPin.trim()) {
-      Alert.alert('Champ manquant', 'Entre le code PIN du pompiste.')
-      return
-    }
-
-    try {
-      setCreatingPump(true)
-
-      await createPumpAttendantUser({
-        structure_id: session.structureId,
-        name: pumpName.trim(),
-        phone: pumpPhone.trim() || null,
-        pin_code: pumpPin.trim()
-      })
-
-      Alert.alert('Succès', 'Pompiste créé avec succès.')
-      setPumpName('')
-      setPumpPhone('')
-      setPumpPin('')
-      await loadAll()
-    } catch (error) {
-      const message =
-        error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de créer le pompiste.'
-      Alert.alert('Erreur', message)
-    } finally {
-      setCreatingPump(false)
-    }
-  }
-
   async function handleSaveStructure() {
-    if (!session?.structureId) {
+    const structureId = session?.structureId || session?.structure_id
+
+    if (!structureId) {
       Alert.alert('Erreur', 'Structure introuvable.')
       return
     }
@@ -295,7 +278,7 @@ export default function ChiefDashboardScreen({ navigation }) {
     try {
       setSavingStructure(true)
 
-      const response = await updateStructure(session.structureId, {
+      const response = await updateStructure(structureId, {
         name: structureName.trim(),
         structure_code: structureCode.trim().toUpperCase()
       })
@@ -312,16 +295,14 @@ export default function ChiefDashboardScreen({ navigation }) {
       setStructureName(nextSession.structureName)
       setStructureCode(nextSession.structureCode)
 
-      Alert.alert(
-        'Succès',
-        'Structure mise à jour. Les prochaines connexions utiliseront le nouveau code.'
-      )
+      Alert.alert('Succès', 'Structure mise à jour.')
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de mettre à jour la structure.'
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible de mettre à jour la structure.'
+      )
     } finally {
       setSavingStructure(false)
     }
@@ -347,49 +328,41 @@ export default function ChiefDashboardScreen({ navigation }) {
     try {
       const payload = {
         name: editingName.trim(),
-        phone: editingPhone.trim() || null
+        phone: editingPhone.trim() || null,
+        truck_number: editingTruck.trim().toUpperCase()
       }
 
-      if (user.role === 'driver') {
-        payload.truck_number = editingTruck.trim().toUpperCase()
-        if (editingPin.trim()) {
-          payload.pin_code = editingPin.trim()
-        }
-      }
-
-      if (user.role === 'pump_attendant') {
-        if (editingPin.trim()) {
-          payload.pin_code = editingPin.trim()
-        }
+      if (editingPin.trim()) {
+        payload.pin_code = editingPin.trim()
       }
 
       await updateUser(user.id, payload)
-      Alert.alert('Succès', 'Utilisateur mis à jour.')
+      Alert.alert('Succès', 'Chauffeur mis à jour.')
       cancelEditUser()
       await loadAll()
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de modifier cet utilisateur.'
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible de modifier ce chauffeur.'
+      )
     }
   }
 
   async function handleDeleteUser(user) {
     try {
       await deactivateUser(user.id)
-      Alert.alert('Succès', 'Utilisateur supprimé de la structure.')
-      if (editingUserId === user.id) {
-        cancelEditUser()
-      }
+      Alert.alert('Succès', 'Chauffeur supprimé de la structure.')
+      if (editingUserId === user.id) cancelEditUser()
       await loadAll()
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de supprimer cet utilisateur.'
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible de supprimer ce chauffeur.'
+      )
     }
   }
 
@@ -412,23 +385,7 @@ export default function ChiefDashboardScreen({ navigation }) {
       <TouchableOpacity
         key={item.key}
         style={[styles.filterChip, isActive && styles.filterChipActive]}
-        onPress={async () => {
-          setActiveStatus(item.key)
-          try {
-            setLoading(true)
-            const status = item.key === 'all' ? undefined : item.key
-            const response = await fetchFuelRequests(status)
-            setRequests(response?.data || [])
-          } catch (error) {
-            const message =
-              error?.response?.data?.message ||
-              error?.message ||
-              'Impossible de filtrer les demandes.'
-            Alert.alert('Erreur', message)
-          } finally {
-            setLoading(false)
-          }
-        }}
+        onPress={() => setActiveStatus(item.key)}
       >
         <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
           {item.label}
@@ -437,11 +394,70 @@ export default function ChiefDashboardScreen({ navigation }) {
     )
   }
 
+  function renderStationChoice(request) {
+    if (request.status !== 'pending') {
+      const stationName =
+        request.station_name ||
+        request.station?.name ||
+        request.station_code ||
+        null
+
+      return stationName ? (
+        <Text style={styles.stationInfo}>Station : {stationName}</Text>
+      ) : null
+    }
+
+    if (!partnerStations.length) {
+      return (
+        <View style={styles.warningBox}>
+          <Text style={styles.warningText}>
+            Aucune station partenaire. Ajoute d’abord une station partenaire avant de valider.
+          </Text>
+        </View>
+      )
+    }
+
+    return (
+      <View style={styles.stationChoiceBox}>
+        <Text style={styles.stationChoiceTitle}>Choisir la station à servir</Text>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {partnerStations.map((station) => {
+            const stationId = station.id || station.station_id
+            const selected = selectedStationByRequest[request.id] === stationId
+
+            return (
+              <TouchableOpacity
+                key={String(stationId)}
+                style={[styles.stationChip, selected && styles.stationChipActive]}
+                onPress={() =>
+                  setSelectedStationByRequest((prev) => ({
+                    ...prev,
+                    [request.id]: stationId
+                  }))
+                }
+              >
+                <Text
+                  style={[
+                    styles.stationChipText,
+                    selected && styles.stationChipTextActive
+                  ]}
+                >
+                  {station.name || station.station_name}
+                </Text>
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
+      </View>
+    )
+  }
+
   function renderRequestItem({ item }) {
     return (
       <View style={styles.requestCard}>
         <View style={styles.requestHeader}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.requestDriver}>{item.driver_name}</Text>
             <Text style={styles.requestTruck}>{item.truck_number}</Text>
           </View>
@@ -464,6 +480,8 @@ export default function ChiefDashboardScreen({ navigation }) {
             <Text style={styles.requestMeta}>Montant : {item.amount}</Text>
           ) : null}
         </View>
+
+        {renderStationChoice(item)}
 
         {item.status === 'pending' ? (
           <View style={styles.actionsRow}>
@@ -490,6 +508,13 @@ export default function ChiefDashboardScreen({ navigation }) {
     return (
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Demandes carburant</Text>
+
+        <TouchableOpacity
+          style={styles.partnerButton}
+          onPress={() => navigation.navigate('PartnerStations')}
+        >
+          <Text style={styles.partnerButtonText}>Gérer les stations partenaires</Text>
+        </TouchableOpacity>
 
         <TextInput
           {...INPUT_PROPS}
@@ -522,7 +547,7 @@ export default function ChiefDashboardScreen({ navigation }) {
     const isEditing = editingUserId === user.id
 
     return (
-      <View key={`${user.role}-${user.id}`} style={styles.userCard}>
+      <View key={`driver-${user.id}`} style={styles.userCard}>
         {isEditing ? (
           <>
             <TextInput
@@ -542,21 +567,19 @@ export default function ChiefDashboardScreen({ navigation }) {
               keyboardType="phone-pad"
             />
 
-            {user.role === 'driver' && (
-              <TextInput
-                {...INPUT_PROPS}
-                style={styles.input}
-                placeholder="Numéro du camion"
-                value={editingTruck}
-                onChangeText={setEditingTruck}
-                autoCapitalize="characters"
-              />
-            )}
+            <TextInput
+              {...INPUT_PROPS}
+              style={styles.input}
+              placeholder="Numéro du camion"
+              value={editingTruck}
+              onChangeText={setEditingTruck}
+              autoCapitalize="characters"
+            />
 
             <TextInput
               {...INPUT_PROPS}
               style={styles.input}
-              placeholder="Nouveau code PIN (optionnel)"
+              placeholder="Nouveau code PIN optionnel"
               value={editingPin}
               onChangeText={setEditingPin}
               keyboardType="numeric"
@@ -583,11 +606,9 @@ export default function ChiefDashboardScreen({ navigation }) {
           <>
             <Text style={styles.userName}>{user.name}</Text>
             {!!user.phone && <Text style={styles.userMeta}>Tél : {user.phone}</Text>}
-            {user.role === 'driver' && (
-              <Text style={styles.userMeta}>
-                {user.truck_number ? `Camion ${user.truck_number}` : 'Sans camion'}
-              </Text>
-            )}
+            <Text style={styles.userMeta}>
+              {user.truck_number ? `Camion ${user.truck_number}` : 'Sans camion'}
+            </Text>
 
             <View style={styles.actionsRow}>
               <TouchableOpacity
@@ -647,6 +668,30 @@ export default function ChiefDashboardScreen({ navigation }) {
         </View>
 
         <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Stations partenaires</Text>
+
+          <Text style={styles.helpText}>
+            Le chef ne crée plus les pompistes. Il choisit les stations avec lesquelles sa société travaille.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.partnerButton}
+            onPress={() => navigation.navigate('PartnerStations')}
+          >
+            <Text style={styles.partnerButtonText}>Ouvrir les stations partenaires</Text>
+          </TouchableOpacity>
+
+          {session?.role === 'admin' || session?.role === 'super_admin' ? (
+            <TouchableOpacity
+              style={styles.adminStationButton}
+              onPress={() => navigation.navigate('StationAdmin')}
+            >
+              <Text style={styles.partnerButtonText}>Admin : créer stations / pompistes</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Créer un chauffeur</Text>
 
           <TextInput
@@ -699,63 +744,11 @@ export default function ChiefDashboardScreen({ navigation }) {
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Créer un pompiste</Text>
-
-          <TextInput
-            {...INPUT_PROPS}
-            style={styles.input}
-            placeholder="Nom du pompiste"
-            value={pumpName}
-            onChangeText={setPumpName}
-          />
-
-          <TextInput
-            {...INPUT_PROPS}
-            style={styles.input}
-            placeholder="Téléphone du pompiste"
-            value={pumpPhone}
-            onChangeText={setPumpPhone}
-            keyboardType="phone-pad"
-          />
-
-          <TextInput
-            {...INPUT_PROPS}
-            style={styles.input}
-            placeholder="Code PIN pompiste"
-            value={pumpPin}
-            onChangeText={setPumpPin}
-            keyboardType="numeric"
-            secureTextEntry
-          />
-
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleCreatePump}
-            disabled={creatingPump}
-          >
-            {creatingPump ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Ajouter le pompiste</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Chauffeurs ({drivers.length})</Text>
           {drivers.length ? (
             drivers.map(renderUserCard)
           ) : (
             <Text style={styles.emptyText}>Aucun chauffeur créé pour le moment.</Text>
-          )}
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Pompistes ({pumpAttendants.length})</Text>
-          {pumpAttendants.length ? (
-            pumpAttendants.map(renderUserCard)
-          ) : (
-            <Text style={styles.emptyText}>Aucun pompiste créé pour le moment.</Text>
           )}
         </View>
       </View>
@@ -771,7 +764,7 @@ export default function ChiefDashboardScreen({ navigation }) {
               {session?.structureName || 'Espace chef'}
             </Text>
             <Text style={styles.heroSubtitle}>
-              Gère ta structure, tes chauffeurs, tes pompistes et les demandes de carburant.
+              Gère ta structure, tes chauffeurs, tes stations partenaires et les demandes carburant.
             </Text>
           </View>
 
@@ -784,7 +777,7 @@ export default function ChiefDashboardScreen({ navigation }) {
           <Text style={styles.codeLabel}>Code structure</Text>
           <Text style={styles.codeValue}>{session?.structureCode || '---'}</Text>
           <Text style={styles.codeHint}>
-            Donne ce code aux chauffeurs et pompistes pour entrer dans ta structure.
+            Donne ce code aux chauffeurs. Les pompistes utilisent maintenant le code de leur station.
           </Text>
         </View>
 
@@ -818,9 +811,7 @@ export default function ChiefDashboardScreen({ navigation }) {
       data={activeTab === 'requests' ? filteredRequests : []}
       keyExtractor={(item) => String(item.id)}
       renderItem={renderRequestItem}
-      refreshControl={
-        <RefreshControl refreshing={loading} onRefresh={refreshRequests} />
-      }
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={refreshRequests} />}
       ListHeaderComponent={renderTopHeader()}
       ListEmptyComponent={
         activeTab === 'requests' ? (
@@ -871,7 +862,7 @@ function statusStyle(status) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F7FB'
+    backgroundColor: 'transparent'
   },
   listContent: {
     padding: 16,
@@ -992,6 +983,32 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800'
   },
+  partnerButton: {
+    backgroundColor: '#0F766E',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12
+  },
+  adminStationButton: {
+    backgroundColor: '#081B33',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  partnerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900'
+  },
+  helpText: {
+    color: '#64748B',
+    fontWeight: '700',
+    lineHeight: 21,
+    marginBottom: 12
+  },
   filtersRow: {
     paddingTop: 4,
     paddingBottom: 4
@@ -1052,6 +1069,55 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#374151',
     marginBottom: 5
+  },
+  stationInfo: {
+    color: '#0F766E',
+    fontWeight: '900',
+    marginBottom: 12
+  },
+  stationChoiceBox: {
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12
+  },
+  stationChoiceTitle: {
+    color: '#064E3B',
+    fontWeight: '900',
+    marginBottom: 10
+  },
+  stationChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginRight: 8
+  },
+  stationChipActive: {
+    backgroundColor: '#0F766E',
+    borderColor: '#0F766E'
+  },
+  stationChipText: {
+    color: '#0F172A',
+    fontWeight: '900'
+  },
+  stationChipTextActive: {
+    color: '#FFFFFF'
+  },
+  warningBox: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12
+  },
+  warningText: {
+    color: '#92400E',
+    fontWeight: '800',
+    lineHeight: 20
   },
   actionsRow: {
     flexDirection: 'row',

@@ -12,8 +12,7 @@ import {
 import { api, getStoredSession } from '../api/client'
 
 const ROLE_OPTIONS = [
-  { label: 'Chauffeur', value: 'driver' },
-  { label: 'Pompiste', value: 'pump_attendant' }
+  { label: 'Chauffeur', value: 'driver' }
 ]
 
 export default function TeamManagementScreen() {
@@ -113,13 +112,13 @@ export default function TeamManagementScreen() {
 
       await loadUsers(session.structureId)
 
-      Alert.alert('Succès', 'Membre ajouté à l’équipe.')
+      Alert.alert('Succès', 'Chauffeur ajouté à l’équipe.')
     } catch (error) {
       console.log('Erreur création utilisateur:', error?.response?.data || error.message)
 
       Alert.alert(
         'Erreur',
-        error?.response?.data?.message || 'Impossible d’ajouter ce membre.'
+        error?.response?.data?.message || 'Impossible d’ajouter ce chauffeur.'
       )
     } finally {
       setLoading(false)
@@ -158,7 +157,7 @@ export default function TeamManagementScreen() {
           <View style={styles.heroCard}>
             <Text style={styles.heroTitle}>Gestion équipe</Text>
             <Text style={styles.heroText}>
-              Ajoute et visualise les membres de ta structure active.
+              Ajoute et visualise les chauffeurs de ta structure active.
             </Text>
 
             <View style={styles.structureBox}>
@@ -170,7 +169,7 @@ export default function TeamManagementScreen() {
           </View>
 
           <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Ajouter un membre</Text>
+            <Text style={styles.formTitle}>Ajouter un chauffeur</Text>
 
             <Text style={styles.label}>Nom</Text>
             <TextInput
@@ -214,8 +213,7 @@ export default function TeamManagementScreen() {
             <View style={styles.infoBox}>
               <Text style={styles.infoTitle}>Ajout par structure</Text>
               <Text style={styles.infoText}>
-                Chaque membre ajouté ici sera automatiquement rattaché à la structure active.
-                Le chef principal n’est pas créé ici : il est créé dès la création de la structure.
+                Chaque chauffeur ajouté ici sera automatiquement rattaché à la structure active. Les pompistes sont désormais gérés côté station, pas côté société.
               </Text>
             </View>
 
@@ -277,11 +275,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F3F7FB'
+    backgroundColor: 'transparent'
   },
   container: {
     flex: 1,
-    backgroundColor: '#F3F7FB'
+    backgroundColor: 'transparent'
   },
   content: {
     padding: 16,

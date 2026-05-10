@@ -15,7 +15,8 @@ const COMPANY_CARDS = [
   {
     key: 'chief',
     title: 'Chef',
-    subtitle: 'Créer et piloter une structure, gérer les chauffeurs, pompistes et demandes.',
+    subtitle: 'Structure',
+    description: 'Créer, gérer et valider.',
     emoji: '🧾',
     accent: '#0F766E',
     soft: '#CCFBF1',
@@ -25,7 +26,8 @@ const COMPANY_CARDS = [
   {
     key: 'driver',
     title: 'Chauffeur',
-    subtitle: 'Entrer dans sa structure, créer une demande et suivre son statut.',
+    subtitle: 'Demandes',
+    description: 'Demander et suivre.',
     emoji: '🚛',
     accent: '#2563EB',
     soft: '#DBEAFE',
@@ -33,21 +35,21 @@ const COMPANY_CARDS = [
     params: { role: 'driver' }
   },
   {
-    key: 'pump',
-    title: 'Pompiste',
-    subtitle: 'Valider les approvisionnements autorisés et enregistrer les litres servis.',
-    emoji: '⛽',
-    accent: '#B45309',
-    soft: '#FEF3C7',
-    route: 'PinAccess',
-    params: { role: 'pump_attendant' }
-  }
+  key: 'pump',
+  title: 'Pompiste',
+  subtitle: 'Station',
+  description: 'Entrer le code station.',
+  emoji: '⛽',
+  accent: '#B45309',
+  soft: '#FEF3C7',
+  route: 'StationAccess',
+  params: {}
+}
 ]
 
 const STATION_CARD = {
-  key: 'station',
   title: 'Responsable station',
-  subtitle: 'Voir les chauffeurs passés, les sociétés, les litres servis et les montants.',
+  subtitle: 'Transactions, litres servis, sociétés et montants.',
   emoji: '🏪',
   accent: '#7C3AED',
   soft: '#EDE9FE',
@@ -55,30 +57,25 @@ const STATION_CARD = {
   params: {}
 }
 
-function AccessCard({ item, navigation, featured = false }) {
+function RoleCard({ item, navigation }) {
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      style={[styles.card, featured && styles.stationCard]}
+      style={styles.roleCard}
       onPress={() => navigation.navigate(item.route, item.params)}
     >
-      <View style={[styles.iconWrap, { backgroundColor: item.soft }]}>
-        <View style={[styles.iconInner, { backgroundColor: item.accent }]}>
-          <Text style={styles.iconText}>{item.emoji}</Text>
-        </View>
+      <View style={[styles.roleIconBox, { backgroundColor: item.soft }]}>
+        <Text style={styles.roleIcon}>{item.emoji}</Text>
       </View>
 
-      <View style={styles.cardBody}>
-        <Text style={styles.cardTitle}>{item.title}</Text>
-        <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
+      <Text style={styles.roleTitle}>{item.title}</Text>
+      <Text style={styles.roleSubtitle}>{item.subtitle}</Text>
+      <Text style={styles.roleDescription}>{item.description}</Text>
 
-        <View style={styles.cardFooter}>
-          <View style={[styles.dot, { backgroundColor: item.accent }]} />
-          <Text style={styles.cardAction}>Accéder</Text>
-        </View>
+      <View style={styles.roleFooter}>
+        <View style={[styles.roleDot, { backgroundColor: item.accent }]} />
+        <Text style={styles.roleAction}>Accéder</Text>
       </View>
-
-      <Text style={styles.chevron}>›</Text>
     </TouchableOpacity>
   )
 }
@@ -98,7 +95,7 @@ export default function HomeScreen({ navigation }) {
       setLoadingSession(true)
       const storedSession = await getStoredSession()
       setSession(storedSession?.token && storedSession?.role ? storedSession : null)
-    } catch (error) {
+    } catch {
       setSession(null)
     } finally {
       setLoadingSession(false)
@@ -110,14 +107,9 @@ export default function HomeScreen({ navigation }) {
 
     if (session.role === 'chief') {
       return {
-        badge: 'SESSION CHEF',
-        title: session.structureName
-          ? `Reprendre ${session.structureName}`
-          : 'Reprendre ma session chef',
-        subtitle: 'Une session chef est déjà active sur cet appareil.',
-        primaryText: 'Reprendre mon espace',
+        title: session.structureName || 'Session chef',
+        subtitle: 'Une session chef est active.',
         accent: '#0F766E',
-        soft: '#CCFBF1',
         icon: '🧾',
         targetScreen: 'ChiefDashboard'
       }
@@ -125,14 +117,9 @@ export default function HomeScreen({ navigation }) {
 
     if (session.role === 'driver') {
       return {
-        badge: 'SESSION CHAUFFEUR',
-        title: session.structureName
-          ? `Reprendre ${session.structureName}`
-          : 'Reprendre ma session chauffeur',
-        subtitle: 'Une session chauffeur est déjà active sur cet appareil.',
-        primaryText: 'Reprendre ma session',
+        title: session.structureName || 'Session chauffeur',
+        subtitle: 'Une session chauffeur est active.',
         accent: '#2563EB',
-        soft: '#DBEAFE',
         icon: '🚛',
         targetScreen: 'DriverDashboard'
       }
@@ -140,16 +127,21 @@ export default function HomeScreen({ navigation }) {
 
     if (session.role === 'pump_attendant') {
       return {
-        badge: 'SESSION POMPISTE',
-        title: session.structureName
-          ? `Reprendre ${session.structureName}`
-          : 'Reprendre ma session pompiste',
-        subtitle: 'Une session pompiste est déjà active sur cet appareil.',
-        primaryText: 'Reprendre ma session',
+        title: session.stationName || 'Session pompiste',
+        subtitle: 'Une session pompiste est active.',
         accent: '#B45309',
-        soft: '#FEF3C7',
         icon: '⛽',
         targetScreen: 'PumpAttendantDashboard'
+      }
+    }
+
+    if (session.role === 'station_manager') {
+      return {
+        title: session.stationName || 'Session station',
+        subtitle: 'Une session responsable station est active.',
+        accent: '#7C3AED',
+        icon: '🏪',
+        targetScreen: 'StationTransactions'
       }
     }
 
@@ -161,7 +153,7 @@ export default function HomeScreen({ navigation }) {
       await clearSession()
       setSession(null)
       Alert.alert('Déconnecté', 'La session a bien été supprimée.')
-    } catch (error) {
+    } catch {
       Alert.alert('Erreur', 'Impossible de fermer la session.')
     }
   }
@@ -169,7 +161,7 @@ export default function HomeScreen({ navigation }) {
   if (loadingSession) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#081B33" />
+        <ActivityIndicator size="large" color="#061A2F" />
         <Text style={styles.loadingText}>Vérification de la session...</Text>
       </View>
     )
@@ -178,24 +170,20 @@ export default function HomeScreen({ navigation }) {
   if (sessionLabel) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-  <View style={styles.heroGlow} />
-  <View style={styles.heroGlowTwo} />
-          <Text style={styles.heroBadge}>Gestion carburant</Text>
-          <Text style={styles.heroTitle}>Session détectée</Text>
-          <Text style={styles.heroText}>
-            Tu peux reprendre ton espace directement ou fermer la session.
-          </Text>
+        <View style={styles.compactHeader}>
+          <View>
+            <Text style={styles.headerTitle}>Gestion carburant</Text>
+            <Text style={styles.headerSubtitle}>Session active</Text>
+          </View>
+
+          <View style={styles.statusPill}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>Actif</Text>
+          </View>
         </View>
 
         <View style={styles.sessionCard}>
-          <View style={[styles.iconWrap, { backgroundColor: sessionLabel.soft }]}>
-            <View style={[styles.iconInner, { backgroundColor: sessionLabel.accent }]}>
-              <Text style={styles.iconText}>{sessionLabel.icon}</Text>
-            </View>
-          </View>
-
-          <Text style={styles.sessionBadge}>{sessionLabel.badge}</Text>
+          <Text style={styles.sessionIcon}>{sessionLabel.icon}</Text>
           <Text style={styles.sessionTitle}>{sessionLabel.title}</Text>
           <Text style={styles.sessionSubtitle}>{sessionLabel.subtitle}</Text>
 
@@ -203,7 +191,7 @@ export default function HomeScreen({ navigation }) {
             style={[styles.primaryButton, { backgroundColor: sessionLabel.accent }]}
             onPress={() => navigation.navigate(sessionLabel.targetScreen)}
           >
-            <Text style={styles.primaryButtonText}>{sessionLabel.primaryText}</Text>
+            <Text style={styles.primaryButtonText}>Reprendre mon espace</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.secondaryButton} onPress={handleLogout}>
@@ -220,77 +208,66 @@ export default function HomeScreen({ navigation }) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.hero}>
-        <Text style={styles.heroBadge}>SUIVI FLOTTE • TEMPS RÉEL</Text>
-        <Text style={styles.heroTitle}>
-  Gestion{'\n'}carburant
-</Text>
-        <Text style={styles.heroText}>
-          Pilote les demandes, les validations et les approvisionnements avec un suivi clair par rôle.
-        </Text>
-
-        <View style={styles.heroStats}>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatNumber}>3</Text>
-            <Text style={styles.heroStatLabel}>rôles société</Text>
-          </View>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatNumber}>1</Text>
-            <Text style={styles.heroStatLabel}>suivi station</Text>
-          </View>
+      <View style={styles.compactHeader}>
+        <View>
+          <Text style={styles.headerTitle}>Gestion carburant</Text>
+          <Text style={styles.headerSubtitle}>Flotte • demandes • station</Text>
         </View>
 
-        <View
-  style={{
-    marginTop: 18,
-    flexDirection: 'row',
-    alignItems: 'center'
-  }}
->
-  <View
-    style={{
-      width: 10,
-      height: 10,
-      borderRadius: 999,
-      backgroundColor: '#22C55E',
-      marginRight: 8
-    }}
-  />
-
-  <Text
-    style={{
-      color: '#D7E4F2',
-      fontSize: 13,
-      fontWeight: '700'
-    }}
-  >
-    Plateforme opérationnelle active
-  </Text>
-</View>
+        <View style={styles.statusPill}>
+          <View style={styles.statusDot} />
+          <Text style={styles.statusText}>Actif</Text>
+        </View>
       </View>
 
-      <Text style={styles.sectionTitle}>Gestion société</Text>
-      <Text style={styles.sectionText}>
-        Les chefs, chauffeurs et pompistes travaillent dans l’environnement de leur structure.
-      </Text>
+      <View style={styles.sectionRow}>
+        <View>
+          <Text style={styles.sectionTitle}>Gestion société</Text>
+          <Text style={styles.sectionText}>Choisis ton espace de travail.</Text>
+        </View>
+      </View>
 
-      <View style={styles.cardsList}>
+      <View style={styles.rolesGrid}>
         {COMPANY_CARDS.map((item) => (
-          <AccessCard key={item.key} item={item} navigation={navigation} />
+          <RoleCard key={item.key} item={item} navigation={navigation} />
         ))}
       </View>
 
-      <Text style={[styles.sectionTitle, styles.stationSectionTitle]}>Suivi station</Text>
-      <Text style={styles.sectionText}>
-        Espace dédié au responsable station pour consulter les mouvements carburant.
-      </Text>
+      <View style={styles.sectionRow}>
+        <View>
+          <Text style={styles.sectionTitle}>Suivi station</Text>
+          <Text style={styles.sectionText}>Récapitulatif des mouvements carburant.</Text>
+        </View>
+      </View>
 
-      <AccessCard item={STATION_CARD} navigation={navigation} featured />
+      <TouchableOpacity
+        activeOpacity={0.9}
+        style={styles.stationCard}
+        onPress={() => navigation.navigate(STATION_CARD.route, STATION_CARD.params)}
+      >
+        <View style={[styles.stationIconBox, { backgroundColor: STATION_CARD.soft }]}>
+          <Text style={styles.stationIcon}>{STATION_CARD.emoji}</Text>
+        </View>
 
-      <View style={styles.footerCard}>
-        <Text style={styles.footerTitle}>Séparation claire des accès</Text>
+        <View style={styles.stationBody}>
+          <View style={styles.stationTop}>
+            <Text style={styles.stationTitle}>{STATION_CARD.title}</Text>
+            <Text style={styles.stationBadge}>Module pro</Text>
+          </View>
+
+          <Text style={styles.stationSubtitle}>{STATION_CARD.subtitle}</Text>
+
+          <View style={styles.stationFooter}>
+            <Text style={styles.stationAction}>Ouvrir le suivi</Text>
+            <Text style={styles.stationArrow}>→</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      <View style={styles.footerNote}>
+        <Text style={styles.footerTitle}>Accès séparés</Text>
         <Text style={styles.footerText}>
-          La société gère les demandes. La station consulte uniquement les transactions servies.
+          La société gère les demandes. La station suit uniquement les transactions servies.
         </Text>
       </View>
     </ScrollView>
@@ -300,235 +277,258 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EEF4FA'
+    backgroundColor: 'transparent'
   },
   content: {
-    padding: 18,
-    paddingBottom: 34
+    padding: 16,
+    paddingBottom: 32
   },
   center: {
     flex: 1,
-    backgroundColor: '#EEF4FA',
+    backgroundColor: 'transparent',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24
+    justifyContent: 'center'
   },
   loadingText: {
-    marginTop: 14,
-    fontSize: 15,
-    color: '#536273'
+    marginTop: 12,
+    color: '#64748B',
+    fontWeight: '700'
   },
-  hero: {
-  borderRadius: 34,
-  padding: 24,
-  marginBottom: 24,
-  overflow: 'hidden',
-  backgroundColor: '#031526',
-  borderWidth: 1,
-  borderColor: 'rgba(255,255,255,0.06)',
-  shadowColor: '#000',
-  shadowOpacity: 0.28,
-  shadowRadius: 24,
-  shadowOffset: { width: 0, height: 14 },
-  elevation: 10
-},
-heroGlow: {
-  position: 'absolute',
-  width: 240,
-  height: 240,
-  borderRadius: 999,
-  backgroundColor: 'rgba(124,58,237,0.18)',
-  top: -90,
-  right: -70
-},
-
-heroGlowTwo: {
-  position: 'absolute',
-  width: 180,
-  height: 180,
-  borderRadius: 999,
-  backgroundColor: 'rgba(14,165,233,0.14)',
-  bottom: -70,
-  left: -40
-},
-  heroBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    color: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 16
-  },
-  heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 31,
-    fontWeight: '900',
-    marginBottom: 10
-  },
-  heroText: {
-    color: '#D7E4F2',
-    fontSize: 15,
-    lineHeight: 22
-  },
-  heroStats: {
+  compactHeader: {
+    backgroundColor: '#061A2F',
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 20,
+    minHeight: 96,
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 20
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#061A2F',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5
   },
-  heroStat: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 18,
-    padding: 14
-  },
-  heroStatNumber: {
+  headerTitle: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: 25,
+    fontWeight: '900',
+    marginBottom: 6
+  },
+  headerSubtitle: {
+    color: '#BFD0E3',
+    fontSize: 14,
+    fontWeight: '700'
+  },
+  statusPill: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#22C55E',
+    marginRight: 7
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '900'
   },
-  heroStatLabel: {
-    color: '#C8D8EA',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2
+  sectionRow: {
+    marginBottom: 12,
+    marginTop: 4
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '900',
     color: '#071C33',
-    marginBottom: 5
-  },
-  stationSectionTitle: {
-    marginTop: 24
+    marginBottom: 3
   },
   sectionText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#5F6E7D',
+    color: '#64748B',
+    fontSize: 13.5,
+    fontWeight: '600'
+  },
+  rolesGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 24
+  },
+  roleCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: '#E1EAF3',
+    shadowColor: '#071C33',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2
+  },
+  roleIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12
   },
-  cardsList: {
-    gap: 14
+  roleIcon: {
+    fontSize: 23
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 16,
+  roleTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#071C33',
+    marginBottom: 2
+  },
+  roleSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    marginBottom: 6
+  },
+  roleDescription: {
+    color: '#64748B',
+    fontSize: 12.5,
+    lineHeight: 17,
+    minHeight: 34
+  },
+  roleFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#071C33',
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#E1EAF3'
+    marginTop: 12
+  },
+  roleDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    marginRight: 7
+  },
+  roleAction: {
+    fontSize: 12.5,
+    color: '#071C33',
+    fontWeight: '900'
   },
   stationCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 26,
+    padding: 16,
+    flexDirection: 'row',
+    borderWidth: 1,
     borderColor: '#C4B5FD',
-    backgroundColor: '#FFFFFF'
+    shadowColor: '#7C3AED',
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+    marginBottom: 18
   },
-  iconWrap: {
-    width: 66,
-    height: 66,
+  stationIconBox: {
+    width: 58,
+    height: 58,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14
   },
-  iconInner: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center'
+  stationIcon: {
+    fontSize: 28
   },
-  iconText: {
-    fontSize: 23
-  },
-  cardBody: {
+  stationBody: {
     flex: 1
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#071C33',
-    marginBottom: 5
-  },
-  cardSubtitle: {
-    fontSize: 13.5,
-    lineHeight: 19,
-    color: '#536273'
-  },
-  cardFooter: {
+  stationTop: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
     alignItems: 'center',
-    marginTop: 10
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    marginRight: 8
-  },
-  cardAction: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#071C33'
-  },
-  chevron: {
-    fontSize: 30,
-    color: '#A2AFBD',
-    marginLeft: 8
-  },
-  footerCard: {
-    marginTop: 22,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 17,
-    borderWidth: 1,
-    borderColor: '#E1EAF3'
-  },
-  footerTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#071C33',
     marginBottom: 6
   },
-  footerText: {
-    fontSize: 14,
+  stationTitle: {
+    color: '#071C33',
+    fontSize: 18,
+    fontWeight: '900',
+    flex: 1
+  },
+  stationBadge: {
+    backgroundColor: '#F5F3FF',
+    color: '#7C3AED',
+    fontSize: 11,
+    fontWeight: '900',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999
+  },
+  stationSubtitle: {
+    color: '#64748B',
+    fontSize: 13.5,
     lineHeight: 20,
-    color: '#5F6E7D'
+    marginBottom: 12
+  },
+  stationFooter: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  stationAction: {
+    color: '#7C3AED',
+    fontSize: 14,
+    fontWeight: '900',
+    marginRight: 6
+  },
+  stationArrow: {
+    color: '#7C3AED',
+    fontSize: 18,
+    fontWeight: '900'
+  },
+  footerNote: {
+    backgroundColor: '#E8F0F8',
+    borderRadius: 20,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#D7E3EF'
+  },
+  footerTitle: {
+    color: '#071C33',
+    fontSize: 15,
+    fontWeight: '900',
+    marginBottom: 5
+  },
+  footerText: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600'
   },
   sessionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 26,
+    borderRadius: 24,
     padding: 20,
     borderWidth: 1,
     borderColor: '#E1EAF3'
   },
-  sessionBadge: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#64748B',
-    letterSpacing: 0.7,
-    marginBottom: 8
+  sessionIcon: {
+    fontSize: 36,
+    marginBottom: 12
   },
   sessionTitle: {
-    fontSize: 23,
+    fontSize: 22,
     fontWeight: '900',
     color: '#071C33',
-    marginBottom: 8
+    marginBottom: 7
   },
   sessionSubtitle: {
+    color: '#64748B',
     fontSize: 14,
-    lineHeight: 21,
-    color: '#5F6E7D',
     marginBottom: 18
   },
   primaryButton: {
@@ -539,18 +539,18 @@ heroGlowTwo: {
   },
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '900'
+    fontWeight: '900',
+    fontSize: 15
   },
   secondaryButton: {
+    backgroundColor: 'transparent',
     borderRadius: 16,
     paddingVertical: 14,
-    alignItems: 'center',
-    backgroundColor: '#EEF3F8'
+    alignItems: 'center'
   },
   secondaryButtonText: {
     color: '#071C33',
-    fontSize: 15,
-    fontWeight: '900'
+    fontWeight: '900',
+    fontSize: 15
   }
 })

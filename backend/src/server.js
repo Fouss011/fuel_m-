@@ -26,7 +26,6 @@ app.use(
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(morgan('dev'))
-app.use('/api/station', stationRoutes)
 
 app.use((req, res, next) => {
   res.setHeader(
@@ -40,7 +39,7 @@ app.get('/', (req, res) => {
   res.json({
     success: true,
     message: 'API Fuel Management en ligne',
-    version: '3.0.0'
+    version: '4.0.0-stations'
   })
 })
 
@@ -48,13 +47,14 @@ app.get('/api', (req, res) => {
   res.json({
     success: true,
     message: 'Bienvenue sur l’API Gestion Carburant',
-    version: '3.0.0',
+    version: '4.0.0-stations',
     routes: {
       health: '/api/health',
       auth: '/api/auth',
       fuelRequests: '/api/fuel-requests',
       structures: '/api/structures',
-      users: '/api/users'
+      users: '/api/users',
+      stations: '/api/stations'
     }
   })
 })
@@ -73,7 +73,8 @@ app.use('/api/auth', authRoutes)
 app.use('/api/fuel-requests', fuelRequestRoutes)
 app.use('/api/structures', structureRoutes)
 app.use('/api/users', userRoutes)
-app.use('/api/station', stationRoutes)
+app.use('/api/stations', stationRoutes)
+app.use('/api/station', stationRoutes) // alias temporaire pour ne pas casser l’ancien front
 
 app.use(notFound)
 app.use(errorHandler)

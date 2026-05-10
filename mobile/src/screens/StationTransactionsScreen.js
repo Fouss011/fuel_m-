@@ -304,7 +304,7 @@ export default function StationTransactionsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EEF4FA'
+    backgroundColor: 'transparent'
   },
   content: {
     padding: 18,
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
-    backgroundColor: '#EEF4FA',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24

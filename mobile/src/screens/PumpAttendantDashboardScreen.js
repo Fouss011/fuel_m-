@@ -2,19 +2,20 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   View,
   Text,
+  TextInput,
+  TouchableOpacity,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
   RefreshControl,
-  TextInput,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  ScrollView
 } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import {
-  fetchFuelRequests,
-  serveFuelRequest,
+  api,
   getStoredSession,
+  serveFuelRequest,
   clearSession
 } from '../api/client'
 
@@ -26,67 +27,143 @@ const INPUT_PROPS = {
 
 export default function PumpAttendantDashboardScreen({ navigation }) {
   const [session, setSession] = useState(null)
+  const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(false)
   const [servingId, setServingId] = useState(null)
-  const [requests, setRequests] = useState([])
-  const [servedValues, setServedValues] = useState({})
+
+  const [search, setSearch] = useState('')
+  const [servedLitersById, setServedLitersById] = useState({})
+  const [amountById, setAmountById] = useState({})
 
   useFocusEffect(
     useCallback(() => {
-      loadPumpDashboard()
+      loadDashboard()
     }, [])
   )
 
-  async function loadPumpDashboard() {
+  async function loadDashboard() {
     try {
       setLoading(true)
 
       const storedSession = await getStoredSession()
+      setSession(storedSession)
 
-      if (!storedSession?.token || storedSession?.role !== 'pump_attendant') {
-        Alert.alert('Session expirée', 'Reconnecte-toi comme pompiste.')
+      const stationId = storedSession?.stationId || storedSession?.station_id
+
+      if (!stationId) {
+        Alert.alert(
+          'Session station invalide',
+          'Reconnecte-toi avec le code de ta station.'
+        )
         navigation.reset({
           index: 0,
-          routes: [{ name: 'Home' }]
+          routes: [{ name: 'StationAccess' }]
         })
         return
       }
 
-      setSession(storedSession)
+      const response = await api.get(`/station/${stationId}/pending-requests`)
+      const data = response?.data?.data || response?.data || []
 
-      const response = await fetchFuelRequests('approved')
-      setRequests(response?.data || [])
+      setRequests(Array.isArray(data) ? data : data.requests || [])
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de charger l’espace pompiste.'
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible de charger les demandes de la station.'
+      )
     } finally {
       setLoading(false)
     }
   }
 
+  const filteredRequests = useMemo(() => {
+    const q = search.trim().toLowerCase()
+
+    if (!q) return requests
+
+    return requests.filter((item) => {
+      const structureName =
+        item.structure_name ||
+        item.structure?.name ||
+        item.company_name ||
+        ''
+
+      const structureCode =
+        item.structure_code ||
+        item.structure?.structure_code ||
+        ''
+
+      const driverName =
+        item.driver_name ||
+        item.driver?.name ||
+        ''
+
+      const truckNumber =
+        item.truck_number ||
+        item.driver?.truck_number ||
+        ''
+
+      return (
+        structureName.toLowerCase().includes(q) ||
+        structureCode.toLowerCase().includes(q) ||
+        driverName.toLowerCase().includes(q) ||
+        truckNumber.toLowerCase().includes(q)
+      )
+    })
+  }, [requests, search])
+
+  const todayStats = useMemo(() => {
+    const count = requests.length
+
+    const liters = requests.reduce((sum, item) => {
+      return sum + Number(item.approved_liters || item.requested_liters || 0)
+    }, 0)
+
+    return {
+      count,
+      liters
+    }
+  }, [requests])
+
+  function updateServedLiters(id, value) {
+    setServedLitersById((prev) => ({
+      ...prev,
+      [id]: value
+    }))
+  }
+
+  function updateAmount(id, value) {
+    setAmountById((prev) => ({
+      ...prev,
+      [id]: value
+    }))
+  }
+
   async function handleServe(item) {
-    const rawValue = servedValues[item.id]
+    const approvedLiters = Number(item.approved_liters || item.requested_liters || 0)
+    const servedLitersRaw = servedLitersById[item.id]
+    const amountRaw = amountById[item.id]
 
-    if (!rawValue?.trim()) {
-      Alert.alert('Champ manquant', 'Entre la quantité réellement servie.')
+    const servedLiters = Number(String(servedLitersRaw || '').replace(',', '.'))
+    const amount = Number(String(amountRaw || '').replace(',', '.'))
+
+    if (!servedLiters || servedLiters <= 0) {
+      Alert.alert('Quantité invalide', 'Entre la quantité réellement servie.')
       return
     }
 
-    const liters = Number(rawValue)
-
-    if (Number.isNaN(liters) || liters <= 0) {
-      Alert.alert('Valeur invalide', 'Entre une quantité correcte.')
-      return
-    }
-
-    if (liters > Number(item.approved_liters || 0)) {
+    if (approvedLiters && servedLiters > approvedLiters) {
       Alert.alert(
         'Quantité trop élevée',
-        `Tu ne peux pas servir plus de ${item.approved_liters} L validés par le chef.`
+        `Tu ne peux pas servir plus que ${approvedLiters} L validés par le chef.`
       )
+      return
+    }
+
+    if (!amount || amount <= 0) {
+      Alert.alert('Montant invalide', 'Entre le montant réel de la transaction.')
       return
     }
 
@@ -94,170 +171,190 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
       setServingId(item.id)
 
       await serveFuelRequest(item.id, {
-        served_liters: liters
+        served_liters: servedLiters,
+        amount,
+        station_id: session?.stationId || session?.station_id,
+        pump_attendant_id: session?.userId || session?.user_id
       })
 
-      Alert.alert('Succès', 'Le service a été confirmé.')
+      Alert.alert('Carburant servi', 'La transaction a été validée avec succès.')
 
-      setServedValues((prev) => ({
-        ...prev,
-        [item.id]: ''
-      }))
+      setServedLitersById((prev) => {
+        const next = { ...prev }
+        delete next[item.id]
+        return next
+      })
 
-      await loadPumpDashboard()
+      setAmountById((prev) => {
+        const next = { ...prev }
+        delete next[item.id]
+        return next
+      })
+
+      await loadDashboard()
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Erreur',
         error?.response?.data?.message ||
-        error?.message ||
-        'Impossible de confirmer le service.'
-
-      Alert.alert('Erreur', message)
+          error?.message ||
+          'Impossible de valider le service carburant.'
+      )
     } finally {
       setServingId(null)
     }
   }
 
   async function handleLogout() {
-    try {
-      await clearSession()
-
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Home' }]
-      })
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de se déconnecter.')
-    }
+    await clearSession()
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }]
+    })
   }
 
-  const stats = useMemo(() => {
-    const total = requests.length
-    const totalLiters = requests.reduce(
-      (sum, item) => sum + Number(item.approved_liters || 0),
-      0
-    )
+  function renderRequest({ item }) {
+    const structureName =
+      item.structure_name ||
+      item.structure?.name ||
+      item.company_name ||
+      'Structure non renseignée'
 
-    return {
-      total,
-      totalLiters
-    }
-  }, [requests])
+    const structureCode =
+      item.structure_code ||
+      item.structure?.structure_code ||
+      '---'
 
-  function renderRequestItem({ item }) {
-    const currentValue = servedValues[item.id] || ''
-    const isServing = servingId === item.id
+    const driverName =
+      item.driver_name ||
+      item.driver?.name ||
+      'Chauffeur non renseigné'
+
+    const truckNumber =
+      item.truck_number ||
+      item.driver?.truck_number ||
+      '---'
+
+    const approvedLiters = item.approved_liters || item.requested_liters || 0
 
     return (
       <View style={styles.requestCard}>
-        <View style={styles.requestHeader}>
-          <View style={styles.requestInfo}>
-            <Text style={styles.driverName}>{item.driver_name}</Text>
-            <Text style={styles.driverTruck}>{item.truck_number}</Text>
+        <View style={styles.requestTop}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.structureName}>{structureName}</Text>
+            <Text style={styles.structureCode}>Code : {structureCode}</Text>
           </View>
 
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>VALIDÉE</Text>
+          <View style={styles.statusPill}>
+            <Text style={styles.statusText}>À servir</Text>
           </View>
         </View>
 
-        <View style={styles.metaBox}>
-          <Text style={styles.metaText}>Carburant : {item.fuel_type}</Text>
-          <Text style={styles.metaText}>
-            Quantité validée : {item.approved_liters} L
-          </Text>
+        <View style={styles.infoBox}>
+          <Text style={styles.infoText}>Chauffeur : {driverName}</Text>
+          <Text style={styles.infoText}>Camion : {truckNumber}</Text>
+          <Text style={styles.infoText}>Carburant : {item.fuel_type || 'Non renseigné'}</Text>
+          <Text style={styles.infoStrong}>Quantité validée : {approvedLiters} L</Text>
         </View>
 
+        <Text style={styles.label}>Quantité réellement servie</Text>
         <TextInput
           {...INPUT_PROPS}
-          style={styles.input}
-          placeholder={`Servi (max ${item.approved_liters} L)`}
+          value={servedLitersById[item.id] || ''}
+          onChangeText={(value) => updateServedLiters(item.id, value)}
+          placeholder="Ex : 40"
           keyboardType="numeric"
-          value={currentValue}
-          onChangeText={(value) => {
-            setServedValues((prev) => ({
-              ...prev,
-              [item.id]: value
-            }))
-          }}
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Montant réel</Text>
+        <TextInput
+          {...INPUT_PROPS}
+          value={amountById[item.id] || ''}
+          onChangeText={(value) => updateAmount(item.id, value)}
+          placeholder="Ex : 32000"
+          keyboardType="numeric"
+          style={styles.input}
         />
 
         <TouchableOpacity
-          style={[
-            styles.confirmButton,
-            isServing && styles.confirmButtonDisabled
-          ]}
+          style={[styles.serveButton, servingId === item.id && styles.disabledButton]}
           onPress={() => handleServe(item)}
-          disabled={isServing}
+          disabled={servingId === item.id}
         >
-          {isServing ? (
+          {servingId === item.id ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.confirmButtonText}>Confirmer le service</Text>
+            <Text style={styles.serveButtonText}>Valider le service</Text>
           )}
         </TouchableOpacity>
       </View>
     )
   }
 
-  return (
-    <FlatList
-      data={requests}
-      keyExtractor={(item) => String(item.id)}
-      renderItem={renderRequestItem}
-      refreshControl={
-        <RefreshControl refreshing={loading} onRefresh={loadPumpDashboard} />
-      }
-      ListHeaderComponent={
-        <View style={styles.headerContainer}>
-          <View style={styles.heroCard}>
-            <View>
-              <Text style={styles.heroTitle}>
-                {session?.userName || 'Espace pompiste'}
-              </Text>
-              <Text style={styles.heroSubtitle}>
-                {session?.structureName || 'Structure'}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.logoutButton}
-              onPress={handleLogout}
-            >
-              <Text style={styles.logoutButtonText}>Déconnexion</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{stats.total}</Text>
-              <Text style={styles.statLabel}>Demandes à servir</Text>
-            </View>
-
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>{stats.totalLiters} L</Text>
-              <Text style={styles.statLabel}>Volume validé</Text>
-            </View>
-          </View>
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>Demandes prêtes</Text>
-            <Text style={styles.infoText}>
-              Tu vois uniquement les demandes validées de ta structure. Une fois
-              servie, la demande disparaît automatiquement de cette liste.
+  function renderHeader() {
+    return (
+      <View>
+        <View style={styles.hero}>
+          <View>
+            <Text style={styles.badge}>Espace pompiste</Text>
+            <Text style={styles.title}>{session?.stationName || 'Ma station'}</Text>
+            <Text style={styles.subtitle}>
+              Connecté : {session?.name || 'Pompiste'}
             </Text>
           </View>
+
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutText}>Déconnexion</Text>
+          </TouchableOpacity>
         </View>
+
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{todayStats.count}</Text>
+            <Text style={styles.statLabel}>À servir</Text>
+          </View>
+
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{todayStats.liters}</Text>
+            <Text style={styles.statLabel}>Litres validés</Text>
+          </View>
+        </View>
+
+        <View style={styles.searchCard}>
+          <Text style={styles.sectionTitle}>Rechercher une demande</Text>
+          <TextInput
+            {...INPUT_PROPS}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Structure, code, chauffeur ou camion"
+            style={styles.input}
+          />
+        </View>
+
+        <Text style={styles.listTitle}>Demandes en attente station</Text>
+      </View>
+    )
+  }
+
+  return (
+    <FlatList
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      data={filteredRequests}
+      keyExtractor={(item) => String(item.id)}
+      renderItem={renderRequest}
+      ListHeaderComponent={renderHeader}
+      refreshControl={
+        <RefreshControl refreshing={loading} onRefresh={loadDashboard} />
       }
       ListEmptyComponent={
-        <View style={styles.emptyWrap}>
+        <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>Aucune demande à servir</Text>
           <Text style={styles.emptyText}>
-            Les demandes validées par le chef apparaîtront ici.
+            Les demandes validées par les chefs pour cette station apparaîtront ici.
           </Text>
         </View>
       }
-      contentContainerStyle={styles.content}
-      style={styles.container}
     />
   )
 }
@@ -265,168 +362,189 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F7FB'
+    backgroundColor: 'transparent'
   },
   content: {
     padding: 16,
     paddingBottom: 40
   },
-  headerContainer: {
-    paddingBottom: 8
-  },
-  heroCard: {
-    backgroundColor: '#7C2D12',
+  hero: {
+    backgroundColor: '#061A2F',
     borderRadius: 24,
     padding: 20,
     marginBottom: 16
   },
-  heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
+  badge: {
+    color: '#FDE68A',
     fontWeight: '900',
-    marginBottom: 6
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8
   },
-  heroSubtitle: {
-    color: '#FDE8D6',
-    fontSize: 14,
-    marginBottom: 14
+  title: {
+    color: '#FFFFFF',
+    fontSize: 25,
+    fontWeight: '900'
+  },
+  subtitle: {
+    color: '#CBD5E1',
+    marginTop: 8,
+    fontWeight: '700'
   },
   logoutButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
     borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10
+    paddingVertical: 11,
+    alignItems: 'center',
+    marginTop: 16
   },
-  logoutButtonText: {
+  logoutText: {
     color: '#FFFFFF',
-    fontWeight: '800'
+    fontWeight: '900'
   },
   statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 16
   },
   statCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#B45309',
-    marginBottom: 4
-  },
-  statLabel: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '700'
-  },
-  infoCard: {
+    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 16,
-    marginBottom: 16
+    borderWidth: 1,
+    borderColor: '#E1EAF3'
   },
-  infoTitle: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: '#081B33',
-    marginBottom: 8
+  statValue: {
+    color: '#B45309',
+    fontSize: 24,
+    fontWeight: '900'
   },
-  infoText: {
-    fontSize: 14,
+  statLabel: {
     color: '#64748B',
-    lineHeight: 20
+    marginTop: 4,
+    fontWeight: '800'
+  },
+  searchCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E1EAF3'
+  },
+  sectionTitle: {
+    color: '#071C33',
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 12
+  },
+  listTitle: {
+    color: '#071C33',
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 12
   },
   requestCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     padding: 16,
-    marginBottom: 14
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E1EAF3'
   },
-  requestHeader: {
+  requestTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
     marginBottom: 12
   },
-  requestInfo: {
-    flex: 1,
-    paddingRight: 10
+  structureName: {
+    color: '#071C33',
+    fontSize: 18,
+    fontWeight: '900'
   },
-  driverName: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: '#081B33'
-  },
-  driverTruck: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#64748B'
-  },
-  statusBadge: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8
-  },
-  statusBadgeText: {
-    fontSize: 12,
+  structureCode: {
+    color: '#64748B',
     fontWeight: '800',
-    color: '#1D4ED8'
+    marginTop: 4
   },
-  metaBox: {
-    marginBottom: 12
+  statusPill: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6
   },
-  metaText: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 4
+  statusText: {
+    color: '#92400E',
+    fontWeight: '900',
+    fontSize: 12
+  },
+  infoBox: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#FDE68A'
+  },
+  infoText: {
+    color: '#475569',
+    fontWeight: '700',
+    marginBottom: 5
+  },
+  infoStrong: {
+    color: '#92400E',
+    fontWeight: '900',
+    marginTop: 4
+  },
+  label: {
+    color: '#071C33',
+    fontWeight: '900',
+    marginBottom: 8
   },
   input: {
-    backgroundColor: '#F6F9FC',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#DFE7F0',
+    borderColor: '#CBD5E1',
     borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: '#081B33',
+    paddingVertical: 13,
+    color: '#071C33',
+    fontWeight: '800',
     marginBottom: 12
   },
-  confirmButton: {
+  serveButton: {
     backgroundColor: '#B45309',
     borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  confirmButtonDisabled: {
-    opacity: 0.7
-  },
-  confirmButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800'
-  },
-  emptyWrap: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 22,
+    paddingVertical: 15,
     alignItems: 'center'
   },
+  disabledButton: {
+    opacity: 0.65
+  },
+  serveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '900'
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E1EAF3'
+  },
   emptyTitle: {
-    fontSize: 17,
+    color: '#071C33',
+    fontSize: 18,
     fontWeight: '900',
-    color: '#081B33',
     marginBottom: 8
   },
   emptyText: {
-    fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
-    lineHeight: 20
+    lineHeight: 21,
+    fontWeight: '700'
   }
 })

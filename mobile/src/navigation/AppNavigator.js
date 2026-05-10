@@ -8,6 +8,11 @@ import PumpAttendantDashboardScreen from '../screens/PumpAttendantDashboardScree
 import StationLoginScreen from '../screens/StationLoginScreen'
 import StationTransactionsScreen from '../screens/StationTransactionsScreen'
 
+import StationAccessScreen from '../screens/StationAccessScreen'
+import PartnerStationsScreen from '../screens/PartnerStationsScreen'
+import StationManagerDashboardScreen from '../screens/StationManagerDashboardScreen'
+import StationAdminScreen from '../screens/StationAdminScreen'
+
 const Stack = createNativeStackNavigator()
 
 export default function AppNavigator() {
@@ -27,7 +32,7 @@ export default function AppNavigator() {
         headerShadowVisible: false,
         headerTitleAlign: 'center',
         contentStyle: {
-          backgroundColor: '#F3F7FB'
+          backgroundColor: 'transparent'
         },
         animation: 'slide_from_right'
       }}
@@ -66,6 +71,30 @@ export default function AppNavigator() {
         name="StationLogin"
         component={StationLoginScreen}
         options={{ title: 'Accès station' }}
+      />
+
+      <Stack.Screen
+        name="StationAccess"
+        component={StationAccessScreen}
+        options={{ title: 'Accès pompiste' }}
+      />
+
+      <Stack.Screen
+        name="PartnerStations"
+        component={PartnerStationsScreen}
+        options={{ title: 'Stations partenaires' }}
+      />
+
+      <Stack.Screen
+        name="StationManagerDashboard"
+        component={StationManagerDashboardScreen}
+        options={{ title: 'Responsable station' }}
+      />
+
+      <Stack.Screen
+        name="StationAdmin"
+        component={StationAdminScreen}
+        options={{ title: 'Admin stations' }}
       />
 
       <Stack.Screen

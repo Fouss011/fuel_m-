@@ -8,7 +8,7 @@ import {
   Alert,
   ScrollView
 } from 'react-native'
-import { saveSession } from '../api/client'
+import { setStoredSession } from '../api/client'
 
 const PIN_REGEX = /^\d{4,8}$/
 
@@ -17,7 +17,6 @@ export default function CreateStructureScreen({ navigation }) {
   const [ownerName, setOwnerName] = useState('')
   const [ownerPhone, setOwnerPhone] = useState('')
   const [pinChief, setPinChief] = useState('1234')
-  const [pinPump, setPinPump] = useState('5678')
   const [loading, setLoading] = useState(false)
 
   async function handleCreateStructure() {
@@ -25,7 +24,6 @@ export default function CreateStructureScreen({ navigation }) {
     const cleanOwnerName = ownerName.trim()
     const cleanOwnerPhone = ownerPhone.trim()
     const cleanPinChief = pinChief.trim()
-    const cleanPinPump = pinPump.trim()
 
     if (!cleanName) {
       Alert.alert('Nom requis', 'Le nom de la structure est obligatoire.')
@@ -47,31 +45,10 @@ export default function CreateStructureScreen({ navigation }) {
       return
     }
 
-    if (!cleanPinPump) {
-      Alert.alert('PIN pompiste requis', 'Le code PIN pompiste est obligatoire.')
-      return
-    }
-
     if (!PIN_REGEX.test(cleanPinChief)) {
       Alert.alert(
         'PIN chef invalide',
         'Le code PIN chef doit contenir entre 4 et 8 chiffres.'
-      )
-      return
-    }
-
-    if (!PIN_REGEX.test(cleanPinPump)) {
-      Alert.alert(
-        'PIN pompiste invalide',
-        'Le code PIN pompiste doit contenir entre 4 et 8 chiffres.'
-      )
-      return
-    }
-
-    if (cleanPinChief === cleanPinPump) {
-      Alert.alert(
-        'PIN invalides',
-        'Le PIN chef et le PIN pompiste doivent être différents.'
       )
       return
     }
@@ -85,8 +62,7 @@ export default function CreateStructureScreen({ navigation }) {
         name: cleanName,
         owner_name: cleanOwnerName,
         owner_phone: cleanOwnerPhone,
-        pin_chief: cleanPinChief,
-        pin_pump: cleanPinPump
+        pin_chief: cleanPinChief
       }
 
       const structureResponse = await api.post('/structures', structurePayload)
@@ -97,12 +73,14 @@ export default function CreateStructureScreen({ navigation }) {
         throw new Error('Structure créée mais identifiant introuvable')
       }
 
-      await saveSession({
+      await setStoredSession({
         userId: createdChief?.id || null,
         userName: createdChief?.name || cleanOwnerName,
         role: 'chief',
         structureId: createdStructure.id,
-        structureName: createdStructure.name
+        structureName: createdStructure.name,
+        structureCode: createdStructure.structure_code || null,
+        token: structureResponse?.data?.token || ''
       })
 
       Alert.alert(
@@ -136,8 +114,7 @@ export default function CreateStructureScreen({ navigation }) {
 
         <Text style={styles.title}>Créer une structure</Text>
         <Text style={styles.subtitle}>
-          Le chef crée l’espace de travail de son entreprise et devient automatiquement
-          responsable de cette structure.
+          Le chef crée l’espace de travail de son entreprise. Les pompistes seront gérés côté station, pas côté société.
         </Text>
       </View>
 
@@ -182,25 +159,7 @@ export default function CreateStructureScreen({ navigation }) {
           secureTextEntry
         />
 
-        <Text style={styles.label}>PIN Pompiste</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="5678"
-          placeholderTextColor="#94A3B8"
-          value={pinPump}
-          onChangeText={setPinPump}
-          keyboardType="numeric"
-          maxLength={8}
-          secureTextEntry
-        />
 
-        <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>Création complète</Text>
-          <Text style={styles.infoText}>
-            La structure est créée avec son chef principal automatiquement rattaché.
-            Tu n’as plus besoin de créer le chef une deuxième fois.
-          </Text>
-        </View>
 
         <TouchableOpacity
           style={styles.button}
@@ -220,7 +179,7 @@ export default function CreateStructureScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F7FB'
+    backgroundColor: 'transparent'
   },
   content: {
     padding: 16,

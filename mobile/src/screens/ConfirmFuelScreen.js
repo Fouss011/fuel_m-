@@ -322,7 +322,7 @@ export default function ConfirmFuelScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F7FB'
+    backgroundColor: 'transparent'
   },
   content: {
     padding: 16,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F3F7FB',
+    backgroundColor: 'transparent',
     paddingHorizontal: 24
   },
   loadingText: {

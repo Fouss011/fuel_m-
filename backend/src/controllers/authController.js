@@ -17,20 +17,12 @@ function normalizeStructureCode(value) {
   return clean ? clean.toUpperCase() : null
 }
 
-function mapRoleLabel(role) {
-  switch (role) {
-    case 'chief':
-      return 'chef'
-    case 'pump_attendant':
-      return 'pompiste'
-    case 'driver':
-      return 'chauffeur'
-    default:
-      return role || 'utilisateur'
-  }
+function normalizeStationCode(value) {
+  const clean = normalizeString(value)
+  return clean ? clean.toUpperCase() : null
 }
 
-function buildSession({ user, structure, extra = {} }) {
+function buildSession({ user, structure = null, station = null, extra = {} }) {
   const ttlHours = Number(process.env.SESSION_TTL_HOURS || 12)
   const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString()
 
@@ -38,19 +30,18 @@ function buildSession({ user, structure, extra = {} }) {
     userId: user.id,
     userName: user.name,
     role: user.role,
-    structureId: structure.id,
-    structureName: structure.name,
-    structureCode: structure.structure_code,
+    structureId: structure?.id || user.structure_id || null,
+    structureName: structure?.name || null,
+    structureCode: structure?.structure_code || null,
+    stationId: station?.id || user.station_id || null,
+    stationName: station?.name || null,
+    stationCode: station?.station_code || null,
     ...extra
   }
 
   const token = createSessionToken(sessionPayload)
 
-  return {
-    token,
-    expires_at: expiresAt,
-    session: sessionPayload
-  }
+  return { token, expires_at: expiresAt, session: sessionPayload }
 }
 
 export async function chiefLogin(req, res, next) {
@@ -58,19 +49,8 @@ export async function chiefLogin(req, res, next) {
     const phone = normalizePhone(req.body?.phone)
     const password = normalizeString(req.body?.password)
 
-    if (!phone) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le numéro du chef est obligatoire.'
-      })
-    }
-
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le mot de passe est obligatoire.'
-      })
-    }
+    if (!phone) return res.status(400).json({ success: false, message: 'Le numéro du chef est obligatoire.' })
+    if (!password) return res.status(400).json({ success: false, message: 'Le mot de passe est obligatoire.' })
 
     const { data: structure, error } = await supabase
       .from('structures')
@@ -79,20 +59,10 @@ export async function chiefLogin(req, res, next) {
       .maybeSingle()
 
     if (error) throw error
-
-    if (!structure) {
-      return res.status(404).json({
-        success: false,
-        message: 'Aucun compte chef trouvé avec ce numéro.'
-      })
-    }
+    if (!structure) return res.status(404).json({ success: false, message: 'Aucun compte chef trouvé avec ce numéro.' })
 
     if (String(structure.owner_password) !== password) {
-      return res.status(401).json({
-        success: false,
-        code: 'INVALID_CREDENTIALS',
-        message: 'Identifiants invalides.'
-      })
+      return res.status(401).json({ success: false, code: 'INVALID_CREDENTIALS', message: 'Identifiants invalides.' })
     }
 
     const { data: chiefUser, error: chiefUserError } = await supabase
@@ -104,24 +74,10 @@ export async function chiefLogin(req, res, next) {
       .maybeSingle()
 
     if (chiefUserError) throw chiefUserError
+    if (!chiefUser) return res.status(404).json({ success: false, message: 'Utilisateur chef introuvable pour cette structure.' })
 
-    if (!chiefUser) {
-      return res.status(404).json({
-        success: false,
-        message: 'Utilisateur chef introuvable pour cette structure.'
-      })
-    }
-
-    const authData = buildSession({
-      user: chiefUser,
-      structure
-    })
-
-    return res.json({
-      success: true,
-      message: 'Connexion chef réussie.',
-      data: authData
-    })
+    const authData = buildSession({ user: chiefUser, structure })
+    return res.json({ success: true, message: 'Connexion chef réussie.', data: authData })
   } catch (error) {
     next(error)
   }
@@ -133,26 +89,9 @@ export async function driverAccess(req, res, next) {
     const driverId = Number(req.body?.driver_id)
     const pinCode = normalizeString(req.body?.pin_code)
 
-    if (!structureCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le code structure est obligatoire.'
-      })
-    }
-
-    if (!Number.isInteger(driverId) || driverId <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le chauffeur est obligatoire.'
-      })
-    }
-
-    if (!pinCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le code PIN du chauffeur est obligatoire.'
-      })
-    }
+    if (!structureCode) return res.status(400).json({ success: false, message: 'Le code structure est obligatoire.' })
+    if (!Number.isInteger(driverId) || driverId <= 0) return res.status(400).json({ success: false, message: 'Le chauffeur est obligatoire.' })
+    if (!pinCode) return res.status(400).json({ success: false, message: 'Le code PIN du chauffeur est obligatoire.' })
 
     const { data: structure, error: structureError } = await supabase
       .from('structures')
@@ -161,13 +100,7 @@ export async function driverAccess(req, res, next) {
       .maybeSingle()
 
     if (structureError) throw structureError
-
-    if (!structure) {
-      return res.status(404).json({
-        success: false,
-        message: 'Code structure invalide.'
-      })
-    }
+    if (!structure) return res.status(404).json({ success: false, message: 'Code structure invalide.' })
 
     const { data: driver, error: driverError } = await supabase
       .from('users')
@@ -179,34 +112,12 @@ export async function driverAccess(req, res, next) {
       .maybeSingle()
 
     if (driverError) throw driverError
+    if (!driver) return res.status(404).json({ success: false, message: 'Chauffeur introuvable dans cette structure.' })
 
-    if (!driver) {
-      return res.status(404).json({
-        success: false,
-        message: 'Chauffeur introuvable dans cette structure.'
-      })
-    }
+    if (String(driver.pin_code || '') !== String(pinCode)) return res.status(401).json({ success: false, message: 'Code PIN chauffeur incorrect.' })
 
-    if (String(driver.pin_code || '') !== String(pinCode)) {
-      return res.status(401).json({
-        success: false,
-        message: 'Code PIN chauffeur incorrect.'
-      })
-    }
-
-    const authData = buildSession({
-      user: driver,
-      structure,
-      extra: {
-        truckNumber: driver.truck_number || null
-      }
-    })
-
-    return res.json({
-      success: true,
-      message: 'Accès chauffeur autorisé.',
-      data: authData
-    })
+    const authData = buildSession({ user: driver, structure, extra: { truckNumber: driver.truck_number || null } })
+    return res.json({ success: true, message: 'Accès chauffeur autorisé.', data: authData })
   } catch (error) {
     next(error)
   }
@@ -214,14 +125,17 @@ export async function driverAccess(req, res, next) {
 
 export async function pumpAttendantAccess(req, res, next) {
   try {
-    const structureCode = normalizeStructureCode(req.body?.structure_code)
+    const stationCode = normalizeStationCode(req.body?.station_code)
+    const stationId = Number(req.body?.station_id)
     const pumpAttendantId = Number(req.body?.pump_attendant_id)
     const pinCode = normalizeString(req.body?.pin_code)
 
-    if (!structureCode) {
+    const hasStationId = Number.isInteger(stationId) && stationId > 0
+
+    if (!stationCode && !hasStationId) {
       return res.status(400).json({
         success: false,
-        message: 'Le code structure est obligatoire.'
+        message: 'Le code station ou la station est obligatoire.'
       })
     }
 
@@ -239,26 +153,33 @@ export async function pumpAttendantAccess(req, res, next) {
       })
     }
 
-    const { data: structure, error: structureError } = await supabase
-      .from('structures')
-      .select('id, name, structure_code')
-      .eq('structure_code', structureCode)
-      .maybeSingle()
+    let stationQuery = supabase
+      .from('station_accounts')
+      .select('id, name, station_code, is_active')
+      .eq('is_active', true)
 
-    if (structureError) throw structureError
+    if (hasStationId) {
+      stationQuery = stationQuery.eq('id', stationId)
+    } else {
+      stationQuery = stationQuery.eq('station_code', stationCode)
+    }
 
-    if (!structure) {
+    const { data: station, error: stationError } = await stationQuery.maybeSingle()
+
+    if (stationError) throw stationError
+
+    if (!station) {
       return res.status(404).json({
         success: false,
-        message: 'Code structure invalide.'
+        message: 'Station introuvable ou inactive.'
       })
     }
 
     const { data: pumpAttendant, error: pumpError } = await supabase
       .from('users')
-      .select('id, name, phone, role, structure_id, is_active, pin_code')
+      .select('id, name, phone, role, structure_id, station_id, is_active, pin_code')
       .eq('id', pumpAttendantId)
-      .eq('structure_id', structure.id)
+      .eq('station_id', station.id)
       .eq('role', 'pump_attendant')
       .eq('is_active', true)
       .maybeSingle()
@@ -268,7 +189,7 @@ export async function pumpAttendantAccess(req, res, next) {
     if (!pumpAttendant) {
       return res.status(404).json({
         success: false,
-        message: 'Pompiste introuvable dans cette structure.'
+        message: 'Pompiste introuvable dans cette station.'
       })
     }
 
@@ -281,13 +202,30 @@ export async function pumpAttendantAccess(req, res, next) {
 
     const authData = buildSession({
       user: pumpAttendant,
-      structure
+      station,
+      extra: {
+        phone: pumpAttendant.phone || null
+      }
     })
 
     return res.json({
       success: true,
       message: 'Accès pompiste autorisé.',
-      data: authData
+      data: {
+        ...authData,
+        user: {
+          id: pumpAttendant.id,
+          name: pumpAttendant.name,
+          phone: pumpAttendant.phone,
+          role: pumpAttendant.role,
+          station_id: pumpAttendant.station_id
+        },
+        station: {
+          id: station.id,
+          name: station.name,
+          station_code: station.station_code
+        }
+      }
     })
   } catch (error) {
     next(error)
@@ -299,20 +237,11 @@ export async function getStructureUsersByCode(req, res, next) {
     const structureCode = normalizeStructureCode(req.params?.structureCode || req.query?.structure_code)
     const role = normalizeString(req.query?.role)
 
-    if (!structureCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le code structure est obligatoire.'
-      })
-    }
+    if (!structureCode) return res.status(400).json({ success: false, message: 'Le code structure est obligatoire.' })
 
-    const allowedRoles = ['driver', 'pump_attendant']
-
+    const allowedRoles = ['driver']
     if (role && !allowedRoles.includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le rôle est invalide. Utilise driver ou pump_attendant.'
-      })
+      return res.status(400).json({ success: false, message: 'Le rôle est invalide. Utilise driver.' })
     }
 
     const { data: structure, error: structureError } = await supabase
@@ -322,13 +251,7 @@ export async function getStructureUsersByCode(req, res, next) {
       .maybeSingle()
 
     if (structureError) throw structureError
-
-    if (!structure) {
-      return res.status(404).json({
-        success: false,
-        message: 'Code structure invalide.'
-      })
-    }
+    if (!structure) return res.status(404).json({ success: false, message: 'Code structure invalide.' })
 
     let query = supabase
       .from('users')
@@ -337,38 +260,18 @@ export async function getStructureUsersByCode(req, res, next) {
       .eq('is_active', true)
       .order('name', { ascending: true })
 
-    if (role) {
-      query = query.eq('role', role)
-    } else {
-      query = query.in('role', allowedRoles)
-    }
+    query = role ? query.eq('role', role) : query.in('role', allowedRoles)
 
     const { data: users, error: usersError } = await query
-
     if (usersError) throw usersError
 
-    return res.json({
-      success: true,
-      data: {
-        structure,
-        users
-      }
-    })
+    return res.json({ success: true, data: { structure, users } })
   } catch (error) {
     next(error)
   }
 }
 
 export function getCurrentSession(req, res) {
-  if (!req.auth) {
-    return res.status(401).json({
-      success: false,
-      message: 'Session invalide ou expirée.'
-    })
-  }
-
-  return res.json({
-    success: true,
-    data: req.auth
-  })
+  if (!req.auth) return res.status(401).json({ success: false, message: 'Session invalide ou expirée.' })
+  return res.json({ success: true, data: req.auth })
 }

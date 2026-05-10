@@ -131,9 +131,10 @@ export async function createFuelRequest(payload) {
   return response.data
 }
 
-export async function approveFuelRequest(id, approved_liters) {
+export async function approveFuelRequest(id, approved_liters, station_id) {
   const response = await api.patch(`/fuel-requests/${id}/approve`, {
-    approved_liters
+    approved_liters,
+    station_id
   })
   return response.data
 }
@@ -179,6 +180,41 @@ export async function deactivateUser(id) {
   return response.data
 }
 
+/**
+ * STATIONS
+ */
+
+export async function fetchStations() {
+  const response = await api.get('/station')
+  return response.data
+}
+
+export async function createStation(payload) {
+  const response = await api.post('/station', payload)
+  return response.data
+}
+
+export async function fetchStationByCode(stationCode) {
+  const cleanCode = String(stationCode || '').trim().toUpperCase()
+  const response = await api.get(`/station/public/${cleanCode}`)
+  return response.data
+}
+
+export async function fetchStationPumpAttendants(stationId) {
+  const response = await api.get(`/station/${stationId}/pump-attendants`)
+  return response.data
+}
+
+export async function createStationPumpAttendant(stationId, payload) {
+  const response = await api.post(`/station/${stationId}/pump-attendants`, payload)
+  return response.data
+}
+
+export async function fetchStationTransactions(stationId, params = {}) {
+  const response = await api.get(`/station/${stationId}/transactions`, { params })
+  return response.data
+}
+
 export async function stationLogin(payload) {
   const response = await api.post('/station/login', payload)
   return response.data
@@ -191,6 +227,29 @@ export async function getStationTransactions(params = {}) {
 
 export async function getStationSummary(params = {}) {
   const response = await api.get('/station/summary', { params })
+  return response.data
+}
+
+/**
+ * STRUCTURE PARTNER STATIONS
+ */
+
+export async function fetchStructurePartnerStations(structureId) {
+  const response = await api.get(`/structures/${structureId}/partner-stations`)
+  return response.data
+}
+
+export async function addStructurePartnerStation(structureId, stationId) {
+  const response = await api.post(`/structures/${structureId}/partner-stations`, {
+    station_id: stationId
+  })
+  return response.data
+}
+
+export async function removeStructurePartnerStation(structureId, stationId) {
+  const response = await api.delete(
+    `/structures/${structureId}/partner-stations/${stationId}`
+  )
   return response.data
 }
 
