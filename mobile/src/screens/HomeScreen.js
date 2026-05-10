@@ -179,6 +179,8 @@ export default function HomeScreen({ navigation }) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.hero}>
+  <View style={styles.heroGlow} />
+  <View style={styles.heroGlowTwo} />
           <Text style={styles.heroBadge}>Gestion carburant</Text>
           <Text style={styles.heroTitle}>Session détectée</Text>
           <Text style={styles.heroText}>
@@ -219,8 +221,10 @@ export default function HomeScreen({ navigation }) {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.hero}>
-        <Text style={styles.heroBadge}>Plateforme professionnelle</Text>
-        <Text style={styles.heroTitle}>Gestion carburant</Text>
+        <Text style={styles.heroBadge}>SUIVI FLOTTE • TEMPS RÉEL</Text>
+        <Text style={styles.heroTitle}>
+  Gestion{'\n'}carburant
+</Text>
         <Text style={styles.heroText}>
           Pilote les demandes, les validations et les approvisionnements avec un suivi clair par rôle.
         </Text>
@@ -235,6 +239,34 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.heroStatLabel}>suivi station</Text>
           </View>
         </View>
+
+        <View
+  style={{
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center'
+  }}
+>
+  <View
+    style={{
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+      backgroundColor: '#22C55E',
+      marginRight: 8
+    }}
+  />
+
+  <Text
+    style={{
+      color: '#D7E4F2',
+      fontSize: 13,
+      fontWeight: '700'
+    }}
+  >
+    Plateforme opérationnelle active
+  </Text>
+</View>
       </View>
 
       <Text style={styles.sectionTitle}>Gestion société</Text>
@@ -287,16 +319,38 @@ const styles = StyleSheet.create({
     color: '#536273'
   },
   hero: {
-    backgroundColor: '#061A2F',
-    borderRadius: 30,
-    padding: 24,
-    marginBottom: 24,
-    shadowColor: '#061A2F',
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5
-  },
+  borderRadius: 34,
+  padding: 24,
+  marginBottom: 24,
+  overflow: 'hidden',
+  backgroundColor: '#031526',
+  borderWidth: 1,
+  borderColor: 'rgba(255,255,255,0.06)',
+  shadowColor: '#000',
+  shadowOpacity: 0.28,
+  shadowRadius: 24,
+  shadowOffset: { width: 0, height: 14 },
+  elevation: 10
+},
+heroGlow: {
+  position: 'absolute',
+  width: 240,
+  height: 240,
+  borderRadius: 999,
+  backgroundColor: 'rgba(124,58,237,0.18)',
+  top: -90,
+  right: -70
+},
+
+heroGlowTwo: {
+  position: 'absolute',
+  width: 180,
+  height: 180,
+  borderRadius: 999,
+  backgroundColor: 'rgba(14,165,233,0.14)',
+  bottom: -70,
+  left: -40
+},
   heroBadge: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(255,255,255,0.14)',
