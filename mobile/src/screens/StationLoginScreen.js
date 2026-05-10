@@ -9,34 +9,61 @@ import {
   Alert,
   ActivityIndicator
 } from 'react-native'
-import { stationLogin, setStoredSession } from '../api/client'
+
+import {
+  stationLogin,
+  createStation,
+  setStoredSession
+} from '../api/client'
+
+const INPUT_PROPS = {
+  placeholderTextColor: '#64748B',
+  selectionColor: '#7C3AED',
+  cursorColor: '#7C3AED'
+}
 
 export default function StationLoginScreen({ navigation }) {
-  const [stationCode, setStationCode] = useState('')
-  const [pinCode, setPinCode] = useState('')
+  const [mode, setMode] = useState('login')
+
   const [loading, setLoading] = useState(false)
 
-  async function handleLogin() {
-    const cleanStationCode = stationCode.trim().toUpperCase()
-    const cleanPin = pinCode.trim()
+  // LOGIN
+  const [stationCode, setStationCode] = useState('')
+  const [pinCode, setPinCode] = useState('')
 
-    if (!cleanStationCode) {
-      Alert.alert('Code station requis', 'Entre le code de la station.')
+  // CREATE
+  const [stationName, setStationName] = useState('')
+  const [createStationCode, setCreateStationCode] = useState('')
+  const [location, setLocation] = useState('')
+  const [managerName, setManagerName] = useState('')
+  const [managerPhone, setManagerPhone] = useState('')
+  const [createPinCode, setCreatePinCode] = useState('')
+
+  async function handleLogin() {
+    if (!stationCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le code station.')
       return
     }
 
-    if (!cleanPin) {
-      Alert.alert('PIN requis', 'Entre le code PIN du responsable station.')
+    if (!pinCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le PIN responsable station.')
       return
     }
 
     try {
       setLoading(true)
 
-      const data = await stationLogin({
-        station_code: cleanStationCode,
-        pin_code: cleanPin
+      const response = await stationLogin({
+        station_code: stationCode.trim().toUpperCase(),
+        pin_code: pinCode.trim()
       })
+
+      const data = response?.data || response
+
+      if (!data?.token) {
+        Alert.alert('Erreur', 'Session station invalide.')
+        return
+      }
 
       await setStoredSession({
         token: data.token,
@@ -48,14 +75,76 @@ export default function StationLoginScreen({ navigation }) {
 
       navigation.reset({
         index: 0,
-        routes: [{ name: 'StationTransactions' }]
+        routes: [{ name: 'StationManagerDashboard' }]
       })
     } catch (error) {
-      const message =
+      Alert.alert(
+        'Connexion refusée',
         error?.response?.data?.message ||
-        'Impossible de connecter le responsable station.'
+          error?.message ||
+          'Impossible de connecter la station.'
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
 
-      Alert.alert('Connexion refusée', message)
+  async function handleCreateStation() {
+    if (!stationName.trim()) {
+      Alert.alert('Champ manquant', 'Entre le nom de la station.')
+      return
+    }
+
+    if (!createStationCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre un code station.')
+      return
+    }
+
+    if (!managerName.trim()) {
+      Alert.alert('Champ manquant', 'Entre le nom du responsable.')
+      return
+    }
+
+    if (!createPinCode.trim()) {
+      Alert.alert('Champ manquant', 'Entre le PIN responsable.')
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      await createStation({
+        name: stationName.trim(),
+        station_code: createStationCode.trim().toUpperCase(),
+        location: location.trim(),
+        manager_name: managerName.trim(),
+        manager_phone: managerPhone.trim(),
+        pin_code: createPinCode.trim()
+      })
+
+      Alert.alert(
+        'Station créée',
+        'La station a été créée avec succès. Tu peux maintenant te connecter.'
+      )
+
+      setMode('login')
+
+      setStationCode(createStationCode.trim().toUpperCase())
+      setPinCode(createPinCode.trim())
+
+      setStationName('')
+      setCreateStationCode('')
+      setLocation('')
+      setManagerName('')
+      setManagerPhone('')
+      setCreatePinCode('')
+    } catch (error) {
+      Alert.alert(
+        'Erreur création',
+        error?.response?.data?.message ||
+          error?.message ||
+          'Impossible de créer la station.'
+      )
     } finally {
       setLoading(false)
     }
@@ -65,59 +154,172 @@ export default function StationLoginScreen({ navigation }) {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
     >
       <View style={styles.hero}>
-        <View style={styles.iconCircle}>
-          <Text style={styles.icon}>🏪</Text>
-        </View>
+        <Text style={styles.heroBadge}>Gestion station</Text>
 
-        <Text style={styles.badge}>Suivi station</Text>
-        <Text style={styles.title}>Responsable station</Text>
-        <Text style={styles.subtitle}>
-          Accède au récapitulatif des chauffeurs servis, des litres distribués et des montants.
+        <Text style={styles.heroTitle}>
+          {mode === 'login'
+            ? 'Connexion responsable station'
+            : 'Créer une station'}
+        </Text>
+
+        <Text style={styles.heroSubtitle}>
+          {mode === 'login'
+            ? 'Connecte-toi avec le code et le PIN de la station.'
+            : 'Créer la station avant d’ajouter les pompistes.'}
         </Text>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>Code station</Text>
-        <TextInput
-          value={stationCode}
-          onChangeText={setStationCode}
-          placeholder="Ex : STATION01"
-          autoCapitalize="characters"
-          style={styles.input}
-          editable={!loading}
-        />
-
-        <Text style={styles.label}>Code PIN</Text>
-        <TextInput
-          value={pinCode}
-          onChangeText={setPinCode}
-          placeholder="PIN responsable"
-          secureTextEntry
-          keyboardType="number-pad"
-          style={styles.input}
-          editable={!loading}
-        />
-
+      <View style={styles.switchRow}>
         <TouchableOpacity
-          activeOpacity={0.9}
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
+          style={[
+            styles.switchButton,
+            mode === 'login' && styles.switchButtonActive
+          ]}
+          onPress={() => setMode('login')}
         >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>Accéder au suivi station</Text>
-          )}
+          <Text
+            style={[
+              styles.switchText,
+              mode === 'login' && styles.switchTextActive
+            ]}
+          >
+            Connexion
+          </Text>
         </TouchableOpacity>
 
-        <Text style={styles.note}>
-          Cet espace permet uniquement de consulter les transactions carburant servies.
-        </Text>
+        <TouchableOpacity
+          style={[
+            styles.switchButton,
+            mode === 'create' && styles.switchButtonActive
+          ]}
+          onPress={() => setMode('create')}
+        >
+          <Text
+            style={[
+              styles.switchText,
+              mode === 'create' && styles.switchTextActive
+            ]}
+          >
+            Créer station
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      {mode === 'login' ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Connexion station</Text>
+
+          <TextInput
+            {...INPUT_PROPS}
+            value={stationCode}
+            onChangeText={(value) =>
+              setStationCode(value.toUpperCase())
+            }
+            placeholder="Code station"
+            autoCapitalize="characters"
+            style={styles.input}
+          />
+
+          <TextInput
+            {...INPUT_PROPS}
+            value={pinCode}
+            onChangeText={setPinCode}
+            placeholder="PIN responsable station"
+            keyboardType="numeric"
+            secureTextEntry
+            style={styles.input}
+          />
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>
+                Ouvrir la station
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Nouvelle station</Text>
+
+          <TextInput
+            {...INPUT_PROPS}
+            value={stationName}
+            onChangeText={setStationName}
+            placeholder="Nom station"
+            style={styles.input}
+          />
+
+          <TextInput
+            {...INPUT_PROPS}
+            value={createStationCode}
+            onChangeText={(value) =>
+              setCreateStationCode(value.toUpperCase())
+            }
+            placeholder="Code station"
+            autoCapitalize="characters"
+            style={styles.input}
+          />
+
+          <TextInput
+            {...INPUT_PROPS}
+            value={location}
+            onChangeText={setLocation}
+            placeholder="Ville / localisation"
+            style={styles.input}
+          />
+
+          <TextInput
+            {...INPUT_PROPS}
+            value={managerName}
+            onChangeText={setManagerName}
+            placeholder="Nom responsable station"
+            style={styles.input}
+          />
+
+          <TextInput
+            {...INPUT_PROPS}
+            value={managerPhone}
+            onChangeText={setManagerPhone}
+            placeholder="Téléphone responsable"
+            keyboardType="phone-pad"
+            style={styles.input}
+          />
+
+          <TextInput
+            {...INPUT_PROPS}
+            value={createPinCode}
+            onChangeText={setCreatePinCode}
+            placeholder="PIN responsable station"
+            keyboardType="numeric"
+            secureTextEntry
+            style={styles.input}
+          />
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleCreateStation}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>
+                Créer la station
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </ScrollView>
   )
 }
@@ -125,108 +327,88 @@ export default function StationLoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent'
+    backgroundColor: '#EEF2FF'
   },
   content: {
-    padding: 18,
-    paddingBottom: 34
+    padding: 16,
+    paddingBottom: 40
   },
   hero: {
-    backgroundColor: '#061A2F',
-    borderRadius: 30,
-    padding: 24,
-    marginBottom: 20,
-    shadowColor: '#061A2F',
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5
-  },
-  iconCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#4C1D95',
+    borderRadius: 26,
+    padding: 22,
     marginBottom: 16
   },
-  icon: {
-    fontSize: 32
-  },
-  badge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(124,58,237,0.35)',
-    color: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    fontSize: 12,
+  heroBadge: {
+    color: '#DDD6FE',
     fontWeight: '900',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 14
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 29,
-    fontWeight: '900',
     marginBottom: 10
   },
-  subtitle: {
-    color: '#D7E4F2',
-    fontSize: 15,
-    lineHeight: 22
+  heroTitle: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: '900'
+  },
+  heroSubtitle: {
+    color: '#E9D5FF',
+    marginTop: 10,
+    lineHeight: 22,
+    fontWeight: '700'
+  },
+  switchRow: {
+    flexDirection: 'row',
+    marginBottom: 16
+  },
+  switchButton: {
+    flex: 1,
+    backgroundColor: '#E9E7FF',
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginHorizontal: 4
+  },
+  switchButtonActive: {
+    backgroundColor: '#4C1D95'
+  },
+  switchText: {
+    color: '#4C1D95',
+    fontWeight: '900'
+  },
+  switchTextActive: {
+    color: '#FFFFFF'
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 26,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E1EAF3',
-    shadowColor: '#071C33',
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 3
+    borderRadius: 24,
+    padding: 18
   },
-  label: {
-    fontSize: 14,
+  sectionTitle: {
+    color: '#111827',
+    fontSize: 20,
     fontWeight: '900',
-    color: '#071C33',
-    marginBottom: 8
-  },
-  input: {
-    backgroundColor: '#F6F9FC',
-    borderWidth: 1,
-    borderColor: '#DDE7F0',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: '#071C33',
     marginBottom: 16
   },
-  button: {
+  input: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 14,
+    color: '#111827',
+    fontWeight: '700'
+  },
+  primaryButton: {
     backgroundColor: '#7C3AED',
-    borderRadius: 17,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 4
+    borderRadius: 18,
+    paddingVertical: 16,
+    alignItems: 'center'
   },
-  buttonDisabled: {
-    opacity: 0.7
-  },
-  buttonText: {
+  primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '900'
-  },
-  note: {
-    color: '#64748B',
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 14,
-    textAlign: 'center'
+    fontWeight: '900',
+    fontSize: 15
   }
 })
