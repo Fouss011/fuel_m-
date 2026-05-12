@@ -83,6 +83,7 @@ export async function createStation(req, res, next) {
     const pinCode = normalizePin(req.body?.pin_code)
     const managerName = normalizeString(req.body?.manager_name)
     const managerPhone = normalizePhone(req.body?.manager_phone)
+    const email = normalizeString(req.body?.email)?.toLowerCase()
     const location = normalizeString(req.body?.location)
 
     if (!name) {
@@ -101,6 +102,13 @@ export async function createStation(req, res, next) {
       return res.status(400).json({ success: false, message: 'Le PIN station doit contenir entre 4 et 8 chiffres.' })
     }
 
+    if (!email) {
+  return res.status(400).json({
+    success: false,
+    message: 'L’email du responsable station est obligatoire.'
+  })
+}
+
     const { data: existing, error: existingError } = await supabase
       .from('station_accounts')
       .select('id')
@@ -114,19 +122,20 @@ export async function createStation(req, res, next) {
     }
 
     const payload = {
-      name,
-      station_code: stationCode,
-      pin_code: pinCode,
-      manager_name: managerName,
-      manager_phone: managerPhone,
-      location,
-      is_active: true
-    }
+  name,
+  station_code: stationCode,
+  pin_code: pinCode,
+  manager_name: managerName,
+  manager_phone: managerPhone,
+  email,
+  location,
+  is_active: true
+}
 
     const { data, error } = await supabase
       .from('station_accounts')
       .insert([payload])
-      .select('id, name, station_code, location, manager_name, manager_phone, is_active, created_at')
+      .select('id, name, station_code, location, manager_name, manager_phone, email, is_active, created_at')
       .single()
 
     if (error) throw error

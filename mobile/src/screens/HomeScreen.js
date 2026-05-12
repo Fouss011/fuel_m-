@@ -11,70 +11,85 @@ import {
 import { useFocusEffect } from '@react-navigation/native'
 import { clearSession, getStoredSession } from '../api/client'
 
-const COMPANY_CARDS = [
+const ACCESS_CARDS = [
   {
     key: 'chief',
-    title: 'Chef',
-    subtitle: 'Structure',
-    description: 'Créer, gérer et valider.',
+    title: 'Chef de société',
+    subtitle: 'Administration structure',
+    description: 'Créer les chauffeurs, choisir les stations partenaires et valider les demandes carburant.',
     emoji: '🧾',
     accent: '#0F766E',
     soft: '#CCFBF1',
     route: 'PinAccess',
-    params: { role: 'chief' }
+    params: { role: 'chief' },
+    action: 'Entrer comme chef'
   },
   {
     key: 'driver',
     title: 'Chauffeur',
-    subtitle: 'Demandes',
-    description: 'Demander et suivre.',
+    subtitle: 'Agent terrain',
+    description: 'Faire une demande carburant, suivre son statut et voir les validations du chef.',
     emoji: '🚛',
     accent: '#2563EB',
     soft: '#DBEAFE',
     route: 'PinAccess',
-    params: { role: 'driver' }
+    params: { role: 'driver' },
+    action: 'Entrer comme chauffeur'
   },
   {
-  key: 'pump',
-  title: 'Pompiste',
-  subtitle: 'Station',
-  description: 'Entrer le code station.',
-  emoji: '⛽',
-  accent: '#B45309',
-  soft: '#FEF3C7',
-  route: 'StationAccess',
-  params: {}
-}
+    key: 'station_manager',
+    title: 'Responsable station',
+    subtitle: 'Gestion station',
+    description: 'Créer la station, gérer les pompistes et suivre les transactions réalisées.',
+    emoji: '🏪',
+    accent: '#7C3AED',
+    soft: '#EDE9FE',
+    route: 'StationLogin',
+    params: {},
+    action: 'Gérer ma station'
+  },
+  {
+    key: 'pump',
+    title: 'Pompiste',
+    subtitle: 'Service carburant',
+    description: 'Entrer le code station, choisir son profil et servir les demandes validées.',
+    emoji: '⛽',
+    accent: '#B45309',
+    soft: '#FEF3C7',
+    route: 'StationAccess',
+    params: {},
+    action: 'Entrer comme pompiste'
+  }
 ]
 
-const STATION_CARD = {
-  title: 'Responsable station',
-  subtitle: 'Transactions, litres servis, sociétés et montants.',
-  emoji: '🏪',
-  accent: '#7C3AED',
-  soft: '#EDE9FE',
-  route: 'StationLogin',
-  params: {}
-}
-
-function RoleCard({ item, navigation }) {
+function AccessCard({ item, navigation }) {
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      style={styles.roleCard}
+      style={[styles.accessCard, { borderColor: item.soft }]}
       onPress={() => navigation.navigate(item.route, item.params)}
     >
-      <View style={[styles.roleIconBox, { backgroundColor: item.soft }]}>
-        <Text style={styles.roleIcon}>{item.emoji}</Text>
+      <View style={styles.accessTop}>
+        <View style={[styles.iconBox, { backgroundColor: item.soft }]}>
+          <Text style={styles.icon}>{item.emoji}</Text>
+        </View>
+
+        <View style={styles.cardTextBox}>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+          <Text style={[styles.cardSubtitle, { color: item.accent }]}>
+            {item.subtitle}
+          </Text>
+        </View>
       </View>
 
-      <Text style={styles.roleTitle}>{item.title}</Text>
-      <Text style={styles.roleSubtitle}>{item.subtitle}</Text>
-      <Text style={styles.roleDescription}>{item.description}</Text>
+      <Text style={styles.cardDescription}>{item.description}</Text>
 
-      <View style={styles.roleFooter}>
-        <View style={[styles.roleDot, { backgroundColor: item.accent }]} />
-        <Text style={styles.roleAction}>Accéder</Text>
+      <View style={styles.cardFooter}>
+        <View style={[styles.line, { backgroundColor: item.accent }]} />
+        <Text style={[styles.cardAction, { color: item.accent }]}>
+          {item.action}
+        </Text>
+        <Text style={[styles.arrow, { color: item.accent }]}>→</Text>
       </View>
     </TouchableOpacity>
   )
@@ -108,7 +123,7 @@ export default function HomeScreen({ navigation }) {
     if (session.role === 'chief') {
       return {
         title: session.structureName || 'Session chef',
-        subtitle: 'Une session chef est active.',
+        subtitle: 'Tu peux reprendre la gestion de ta structure.',
         accent: '#0F766E',
         icon: '🧾',
         targetScreen: 'ChiefDashboard'
@@ -118,7 +133,7 @@ export default function HomeScreen({ navigation }) {
     if (session.role === 'driver') {
       return {
         title: session.structureName || 'Session chauffeur',
-        subtitle: 'Une session chauffeur est active.',
+        subtitle: 'Tu peux reprendre ton espace chauffeur.',
         accent: '#2563EB',
         icon: '🚛',
         targetScreen: 'DriverDashboard'
@@ -128,7 +143,7 @@ export default function HomeScreen({ navigation }) {
     if (session.role === 'pump_attendant') {
       return {
         title: session.stationName || 'Session pompiste',
-        subtitle: 'Une session pompiste est active.',
+        subtitle: 'Tu peux reprendre le service carburant.',
         accent: '#B45309',
         icon: '⛽',
         targetScreen: 'PumpAttendantDashboard'
@@ -138,10 +153,10 @@ export default function HomeScreen({ navigation }) {
     if (session.role === 'station_manager') {
       return {
         title: session.stationName || 'Session station',
-        subtitle: 'Une session responsable station est active.',
+        subtitle: 'Tu peux reprendre la gestion de ta station.',
         accent: '#7C3AED',
         icon: '🏪',
-        targetScreen: 'StationTransactions'
+        targetScreen: 'StationManagerDashboard'
       }
     }
 
@@ -170,20 +185,29 @@ export default function HomeScreen({ navigation }) {
   if (sessionLabel) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <View style={styles.compactHeader}>
-          <View>
-            <Text style={styles.headerTitle}>Gestion carburant</Text>
-            <Text style={styles.headerSubtitle}>Session active</Text>
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View>
+              <Text style={styles.heroBadge}>Session active</Text>
+              <Text style={styles.heroTitle}>Gestion carburant</Text>
+            </View>
+
+            <View style={styles.livePill}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>Connecté</Text>
+            </View>
           </View>
 
-          <View style={styles.statusPill}>
-            <View style={styles.statusDot} />
-            <Text style={styles.statusText}>Actif</Text>
-          </View>
+          <Text style={styles.heroSubtitle}>
+            Ton espace est déjà ouvert. Tu peux continuer sans te reconnecter.
+          </Text>
         </View>
 
         <View style={styles.sessionCard}>
-          <Text style={styles.sessionIcon}>{sessionLabel.icon}</Text>
+          <View style={[styles.sessionIconBox, { backgroundColor: `${sessionLabel.accent}22` }]}>
+            <Text style={styles.sessionIcon}>{sessionLabel.icon}</Text>
+          </View>
+
           <Text style={styles.sessionTitle}>{sessionLabel.title}</Text>
           <Text style={styles.sessionSubtitle}>{sessionLabel.subtitle}</Text>
 
@@ -208,66 +232,56 @@ export default function HomeScreen({ navigation }) {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.compactHeader}>
-        <View>
-          <Text style={styles.headerTitle}>Gestion carburant</Text>
-          <Text style={styles.headerSubtitle}>Flotte • demandes • station</Text>
-        </View>
-
-        <View style={styles.statusPill}>
-          <View style={styles.statusDot} />
-          <Text style={styles.statusText}>Actif</Text>
-        </View>
-      </View>
-
-      <View style={styles.sectionRow}>
-        <View>
-          <Text style={styles.sectionTitle}>Gestion société</Text>
-          <Text style={styles.sectionText}>Choisis ton espace de travail.</Text>
-        </View>
-      </View>
-
-      <View style={styles.rolesGrid}>
-        {COMPANY_CARDS.map((item) => (
-          <RoleCard key={item.key} item={item} navigation={navigation} />
-        ))}
-      </View>
-
-      <View style={styles.sectionRow}>
-        <View>
-          <Text style={styles.sectionTitle}>Suivi station</Text>
-          <Text style={styles.sectionText}>Récapitulatif des mouvements carburant.</Text>
-        </View>
-      </View>
-
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={styles.stationCard}
-        onPress={() => navigation.navigate(STATION_CARD.route, STATION_CARD.params)}
-      >
-        <View style={[styles.stationIconBox, { backgroundColor: STATION_CARD.soft }]}>
-          <Text style={styles.stationIcon}>{STATION_CARD.emoji}</Text>
-        </View>
-
-        <View style={styles.stationBody}>
-          <View style={styles.stationTop}>
-            <Text style={styles.stationTitle}>{STATION_CARD.title}</Text>
-            <Text style={styles.stationBadge}>Module pro</Text>
+      <View style={styles.hero}>
+        <View style={styles.heroTop}>
+          <View>
+            <Text style={styles.heroBadge}>Plateforme terrain</Text>
+            <Text style={styles.heroTitle}>Gestion carburant</Text>
           </View>
 
-          <Text style={styles.stationSubtitle}>{STATION_CARD.subtitle}</Text>
-
-          <View style={styles.stationFooter}>
-            <Text style={styles.stationAction}>Ouvrir le suivi</Text>
-            <Text style={styles.stationArrow}>→</Text>
+          <View style={styles.livePill}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>Actif</Text>
           </View>
         </View>
-      </TouchableOpacity>
+
+        <Text style={styles.heroSubtitle}>
+          Suivi des demandes, validation chef, service station et historique des transactions.
+        </Text>
+
+        <View style={styles.heroStats}>
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatValue}>4</Text>
+            <Text style={styles.heroStatLabel}>espaces</Text>
+          </View>
+
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatValue}>24h</Text>
+            <Text style={styles.heroStatLabel}>suivi</Text>
+          </View>
+
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatValue}>Pro</Text>
+            <Text style={styles.heroStatLabel}>station</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Choisis ton accès</Text>
+        <Text style={styles.sectionText}>
+          Chaque rôle a son espace séparé pour éviter les confusions.
+        </Text>
+      </View>
+
+      {ACCESS_CARDS.map((item) => (
+        <AccessCard key={item.key} item={item} navigation={navigation} />
+      ))}
 
       <View style={styles.footerNote}>
-        <Text style={styles.footerTitle}>Accès séparés</Text>
+        <Text style={styles.footerTitle}>Architecture séparée</Text>
         <Text style={styles.footerText}>
-          La société gère les demandes. La station suit uniquement les transactions servies.
+          La société gère les chauffeurs et les validations. La station gère les pompistes et les transactions servies.
         </Text>
       </View>
     </ScrollView>
@@ -281,7 +295,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingBottom: 32
+    paddingBottom: 36
   },
   center: {
     flex: 1,
@@ -292,35 +306,47 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     color: '#64748B',
-    fontWeight: '700'
+    fontWeight: '800'
   },
-  compactHeader: {
+  hero: {
     backgroundColor: '#061A2F',
-    borderRadius: 24,
-    padding: 18,
+    borderRadius: 30,
+    padding: 22,
     marginBottom: 20,
-    minHeight: 96,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     shadowColor: '#061A2F',
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 5
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 7
   },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 25,
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    alignItems: 'flex-start'
+  },
+  heroBadge: {
+    color: '#99F6E4',
+    fontSize: 12,
     fontWeight: '900',
-    marginBottom: 6
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8
   },
-  headerSubtitle: {
-    color: '#BFD0E3',
-    fontSize: 14,
-    fontWeight: '700'
+  heroTitle: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: -0.5
   },
-  statusPill: {
+  heroSubtitle: {
+    color: '#CBD5E1',
+    fontSize: 14.5,
+    lineHeight: 22,
+    fontWeight: '700',
+    marginTop: 14
+  },
+  livePill: {
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 999,
     paddingHorizontal: 12,
@@ -328,112 +354,74 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center'
   },
-  statusDot: {
+  liveDot: {
     width: 8,
     height: 8,
     borderRadius: 999,
     backgroundColor: '#22C55E',
     marginRight: 7
   },
-  statusText: {
+  liveText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '900'
   },
-  sectionRow: {
-    marginBottom: 12,
-    marginTop: 4
+  heroStats: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18
+  },
+  heroStat: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 10
+  },
+  heroStatValue: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontWeight: '900'
+  },
+  heroStatLabel: {
+    color: '#BFD0E3',
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 3
+  },
+  sectionHeader: {
+    marginBottom: 12
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '900',
     color: '#071C33',
-    marginBottom: 3
+    fontSize: 22,
+    fontWeight: '900',
+    marginBottom: 4
   },
   sectionText: {
     color: '#64748B',
-    fontSize: 13.5,
-    fontWeight: '600'
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700'
   },
-  rolesGrid: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 24
-  },
-  roleCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 13,
-    borderWidth: 1,
-    borderColor: '#E1EAF3',
-    shadowColor: '#071C33',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 2
-  },
-  roleIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12
-  },
-  roleIcon: {
-    fontSize: 23
-  },
-  roleTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#071C33',
-    marginBottom: 2
-  },
-  roleSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    marginBottom: 6
-  },
-  roleDescription: {
-    color: '#64748B',
-    fontSize: 12.5,
-    lineHeight: 17,
-    minHeight: 34
-  },
-  roleFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12
-  },
-  roleDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 999,
-    marginRight: 7
-  },
-  roleAction: {
-    fontSize: 12.5,
-    color: '#071C33',
-    fontWeight: '900'
-  },
-  stationCard: {
+  accessCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 26,
-    padding: 16,
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: '#C4B5FD',
-    shadowColor: '#7C3AED',
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
-    marginBottom: 18
+    padding: 17,
+    marginBottom: 14,
+    borderWidth: 1.5,
+    shadowColor: '#071C33',
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 3
   },
-  stationIconBox: {
+  accessTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 13
+  },
+  iconBox: {
     width: 58,
     height: 58,
     borderRadius: 20,
@@ -441,87 +429,95 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 14
   },
-  stationIcon: {
-    fontSize: 28
+  icon: {
+    fontSize: 29
   },
-  stationBody: {
+  cardTextBox: {
     flex: 1
   },
-  stationTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    alignItems: 'center',
-    marginBottom: 6
-  },
-  stationTitle: {
+  cardTitle: {
     color: '#071C33',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '900',
-    flex: 1
+    marginBottom: 3
   },
-  stationBadge: {
-    backgroundColor: '#F5F3FF',
-    color: '#7C3AED',
-    fontSize: 11,
+  cardSubtitle: {
+    fontSize: 12,
     fontWeight: '900',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
   },
-  stationSubtitle: {
+  cardDescription: {
     color: '#64748B',
-    fontSize: 13.5,
-    lineHeight: 20,
-    marginBottom: 12
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '650',
+    marginBottom: 14
   },
-  stationFooter: {
+  cardFooter: {
     flexDirection: 'row',
     alignItems: 'center'
   },
-  stationAction: {
-    color: '#7C3AED',
+  line: {
+    width: 28,
+    height: 4,
+    borderRadius: 999,
+    marginRight: 9
+  },
+  cardAction: {
     fontSize: 14,
     fontWeight: '900',
-    marginRight: 6
+    flex: 1
   },
-  stationArrow: {
-    color: '#7C3AED',
-    fontSize: 18,
+  arrow: {
+    fontSize: 22,
     fontWeight: '900'
   },
   footerNote: {
     backgroundColor: '#E8F0F8',
-    borderRadius: 20,
-    padding: 15,
+    borderRadius: 22,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#D7E3EF'
+    borderColor: '#D7E3EF',
+    marginTop: 4
   },
   footerTitle: {
     color: '#071C33',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '900',
-    marginBottom: 5
+    marginBottom: 6
   },
   footerText: {
     color: '#64748B',
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '600'
+    fontSize: 13.5,
+    lineHeight: 20,
+    fontWeight: '700'
   },
   sessionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: 28,
+    padding: 22,
     borderWidth: 1,
-    borderColor: '#E1EAF3'
+    borderColor: '#E1EAF3',
+    shadowColor: '#071C33',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4
+  },
+  sessionIconBox: {
+    width: 66,
+    height: 66,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14
   },
   sessionIcon: {
-    fontSize: 36,
-    marginBottom: 12
+    fontSize: 34
   },
   sessionTitle: {
-    fontSize: 22,
+    fontSize: 23,
     fontWeight: '900',
     color: '#071C33',
     marginBottom: 7
@@ -529,11 +525,13 @@ const styles = StyleSheet.create({
   sessionSubtitle: {
     color: '#64748B',
     fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '700',
     marginBottom: 18
   },
   primaryButton: {
-    borderRadius: 16,
-    paddingVertical: 14,
+    borderRadius: 18,
+    paddingVertical: 15,
     alignItems: 'center',
     marginBottom: 10
   },
@@ -543,9 +541,9 @@ const styles = StyleSheet.create({
     fontSize: 15
   },
   secondaryButton: {
-    backgroundColor: 'transparent',
-    borderRadius: 16,
-    paddingVertical: 14,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 18,
+    paddingVertical: 15,
     alignItems: 'center'
   },
   secondaryButtonText: {

@@ -45,17 +45,19 @@ function chiefOwnsStructure(req, structureId) {
 export async function createStructure(req, res, next) {
   try {
     const {
-      name,
-      owner_name,
-      owner_phone,
-      owner_password,
-      confirm_password,
-      structure_code
-    } = req.body
+  name,
+  owner_name,
+  owner_phone,
+  owner_email,
+  owner_password,
+  confirm_password,
+  structure_code
+} = req.body
 
     const cleanName = normalizeString(name)
     const cleanOwnerName = normalizeString(owner_name)
     const cleanOwnerPhone = normalizePhone(owner_phone)
+    const cleanOwnerEmail = normalizeString(owner_email)?.toLowerCase()
     const cleanOwnerPassword = normalizeString(owner_password)
     const cleanConfirmPassword = normalizeString(confirm_password)
     const cleanStructureCode = normalizeStructureCode(structure_code)
@@ -80,6 +82,13 @@ export async function createStructure(req, res, next) {
         message: 'Le numéro du chef est obligatoire'
       })
     }
+
+    if (!cleanOwnerEmail) {
+  return res.status(400).json({
+    success: false,
+    message: 'L’email du chef est obligatoire'
+  })
+}
 
     if (!cleanOwnerPassword) {
       return res.status(400).json({
@@ -169,12 +178,13 @@ export async function createStructure(req, res, next) {
     }
 
     const structurePayload = {
-      name: cleanName,
-      structure_code: cleanStructureCode,
-      owner_name: cleanOwnerName,
-      owner_phone: cleanOwnerPhone,
-      owner_password: cleanOwnerPassword
-    }
+  name: cleanName,
+  structure_code: cleanStructureCode,
+  owner_name: cleanOwnerName,
+  owner_phone: cleanOwnerPhone,
+  owner_email: cleanOwnerEmail,
+  owner_password: cleanOwnerPassword
+}
 
     const { data: structure, error: structureError } = await supabase
       .from('structures')
@@ -185,12 +195,13 @@ export async function createStructure(req, res, next) {
     if (structureError) throw structureError
 
     const chiefPayload = {
-      structure_id: structure.id,
-      name: cleanOwnerName,
-      phone: cleanOwnerPhone,
-      role: 'chief',
-      is_active: true
-    }
+  structure_id: structure.id,
+  name: cleanOwnerName,
+  phone: cleanOwnerPhone,
+  email: cleanOwnerEmail,
+  role: 'chief',
+  is_active: true
+}
 
     const { data: chiefUser, error: chiefUserError } = await supabase
       .from('users')

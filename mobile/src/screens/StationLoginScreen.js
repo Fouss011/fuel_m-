@@ -18,26 +18,26 @@ import {
 
 const INPUT_PROPS = {
   placeholderTextColor: '#64748B',
-  selectionColor: '#7C3AED',
-  cursorColor: '#7C3AED'
+  selectionColor: '#0F766E',
+  cursorColor: '#0F766E'
 }
 
 export default function StationLoginScreen({ navigation }) {
   const [mode, setMode] = useState('login')
-
   const [loading, setLoading] = useState(false)
 
-  // LOGIN
   const [stationCode, setStationCode] = useState('')
   const [pinCode, setPinCode] = useState('')
+  const [showLoginPin, setShowLoginPin] = useState(false)
 
-  // CREATE
   const [stationName, setStationName] = useState('')
   const [createStationCode, setCreateStationCode] = useState('')
   const [location, setLocation] = useState('')
   const [managerName, setManagerName] = useState('')
   const [managerPhone, setManagerPhone] = useState('')
+  const [managerEmail, setManagerEmail] = useState('')
   const [createPinCode, setCreatePinCode] = useState('')
+  const [showCreatePin, setShowCreatePin] = useState(false)
 
   async function handleLogin() {
     if (!stationCode.trim()) {
@@ -46,7 +46,7 @@ export default function StationLoginScreen({ navigation }) {
     }
 
     if (!pinCode.trim()) {
-      Alert.alert('Champ manquant', 'Entre le PIN responsable station.')
+      Alert.alert('Champ manquant', 'Entre le mot de passe responsable station.')
       return
     }
 
@@ -105,8 +105,13 @@ export default function StationLoginScreen({ navigation }) {
       return
     }
 
+    if (!managerEmail.trim()) {
+      Alert.alert('Champ manquant', 'Entre l’email du responsable.')
+      return
+    }
+
     if (!createPinCode.trim()) {
-      Alert.alert('Champ manquant', 'Entre le PIN responsable.')
+      Alert.alert('Champ manquant', 'Entre le mot de passe responsable.')
       return
     }
 
@@ -119,6 +124,7 @@ export default function StationLoginScreen({ navigation }) {
         location: location.trim(),
         manager_name: managerName.trim(),
         manager_phone: managerPhone.trim(),
+        email: managerEmail.trim().toLowerCase(),
         pin_code: createPinCode.trim()
       })
 
@@ -128,7 +134,6 @@ export default function StationLoginScreen({ navigation }) {
       )
 
       setMode('login')
-
       setStationCode(createStationCode.trim().toUpperCase())
       setPinCode(createPinCode.trim())
 
@@ -137,6 +142,7 @@ export default function StationLoginScreen({ navigation }) {
       setLocation('')
       setManagerName('')
       setManagerPhone('')
+      setManagerEmail('')
       setCreatePinCode('')
     } catch (error) {
       Alert.alert(
@@ -150,11 +156,34 @@ export default function StationLoginScreen({ navigation }) {
     }
   }
 
+  function PasswordInput({ value, onChangeText, placeholder, visible, onToggle }) {
+    return (
+      <View style={styles.passwordBox}>
+        <TextInput
+          {...INPUT_PROPS}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          secureTextEntry={!visible}
+          style={styles.passwordInput}
+          autoCapitalize="none"
+        />
+
+        <TouchableOpacity onPress={onToggle}>
+          <Text style={styles.eyeText}>
+            {visible ? 'Masquer' : 'Voir'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
     >
       <View style={styles.hero}>
         <Text style={styles.heroBadge}>Gestion station</Text>
@@ -167,8 +196,8 @@ export default function StationLoginScreen({ navigation }) {
 
         <Text style={styles.heroSubtitle}>
           {mode === 'login'
-            ? 'Connecte-toi avec le code et le PIN de la station.'
-            : 'Créer la station avant d’ajouter les pompistes.'}
+            ? 'Connecte-toi avec le code station et le mot de passe responsable.'
+            : 'Crée le compte station. Les pompistes seront créés ensuite dans l’administration.'}
         </Text>
       </View>
 
@@ -215,23 +244,30 @@ export default function StationLoginScreen({ navigation }) {
           <TextInput
             {...INPUT_PROPS}
             value={stationCode}
-            onChangeText={(value) =>
-              setStationCode(value.toUpperCase())
-            }
+            onChangeText={(value) => setStationCode(value.toUpperCase())}
             placeholder="Code station"
             autoCapitalize="characters"
             style={styles.input}
           />
 
-          <TextInput
-            {...INPUT_PROPS}
+          <PasswordInput
             value={pinCode}
             onChangeText={setPinCode}
-            placeholder="PIN responsable station"
-            keyboardType="numeric"
-            secureTextEntry
-            style={styles.input}
+            placeholder="Mot de passe responsable station"
+            visible={showLoginPin}
+            onToggle={() => setShowLoginPin(!showLoginPin)}
           />
+
+          <TouchableOpacity
+            style={styles.forgotButton}
+            onPress={() =>
+              navigation.navigate('ForgotPassword', {
+                type: 'station'
+              })
+            }
+          >
+            <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.primaryButton}
@@ -262,9 +298,7 @@ export default function StationLoginScreen({ navigation }) {
           <TextInput
             {...INPUT_PROPS}
             value={createStationCode}
-            onChangeText={(value) =>
-              setCreateStationCode(value.toUpperCase())
-            }
+            onChangeText={(value) => setCreateStationCode(value.toUpperCase())}
             placeholder="Code station"
             autoCapitalize="characters"
             style={styles.input}
@@ -297,12 +331,20 @@ export default function StationLoginScreen({ navigation }) {
 
           <TextInput
             {...INPUT_PROPS}
+            value={managerEmail}
+            onChangeText={setManagerEmail}
+            placeholder="Email responsable station"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            style={styles.input}
+          />
+
+          <PasswordInput
             value={createPinCode}
             onChangeText={setCreatePinCode}
-            placeholder="PIN responsable station"
-            keyboardType="numeric"
-            secureTextEntry
-            style={styles.input}
+            placeholder="Mot de passe responsable station"
+            visible={showCreatePin}
+            onToggle={() => setShowCreatePin(!showCreatePin)}
           />
 
           <TouchableOpacity
@@ -327,20 +369,20 @@ export default function StationLoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EEF2FF'
+    backgroundColor: '#EEF6FB'
   },
   content: {
     padding: 16,
     paddingBottom: 40
   },
   hero: {
-    backgroundColor: '#4C1D95',
+    backgroundColor: '#002B45',
     borderRadius: 26,
     padding: 22,
     marginBottom: 16
   },
   heroBadge: {
-    color: '#DDD6FE',
+    color: '#A7F3D0',
     fontWeight: '900',
     textTransform: 'uppercase',
     marginBottom: 10
@@ -351,28 +393,29 @@ const styles = StyleSheet.create({
     fontWeight: '900'
   },
   heroSubtitle: {
-    color: '#E9D5FF',
+    color: '#D6E4F0',
     marginTop: 10,
     lineHeight: 22,
     fontWeight: '700'
   },
   switchRow: {
     flexDirection: 'row',
-    marginBottom: 16
+    marginBottom: 16,
+    backgroundColor: '#DDECF6',
+    padding: 5,
+    borderRadius: 18
   },
   switchButton: {
     flex: 1,
-    backgroundColor: '#E9E7FF',
     paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginHorizontal: 4
+    borderRadius: 14,
+    alignItems: 'center'
   },
   switchButtonActive: {
-    backgroundColor: '#4C1D95'
+    backgroundColor: '#002B45'
   },
   switchText: {
-    color: '#4C1D95',
+    color: '#48657A',
     fontWeight: '900'
   },
   switchTextActive: {
@@ -381,7 +424,9 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 18
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#D2E3EF'
   },
   sectionTitle: {
     color: '#111827',
@@ -390,9 +435,9 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   input: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F8FBFD',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#C9DCEB',
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -400,8 +445,37 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '700'
   },
+  passwordBox: {
+    backgroundColor: '#F8FBFD',
+    borderWidth: 1,
+    borderColor: '#C9DCEB',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 14,
+    color: '#111827',
+    fontWeight: '700'
+  },
+  eyeText: {
+    color: '#0F766E',
+    fontWeight: '900'
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 14,
+    paddingVertical: 4
+  },
+  forgotText: {
+    color: '#0F766E',
+    fontWeight: '900'
+  },
   primaryButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#0F766E',
     borderRadius: 18,
     paddingVertical: 16,
     alignItems: 'center'

@@ -30,12 +30,17 @@ export default function PinAccessScreen({ route, navigation }) {
   const [selectedUserName, setSelectedUserName] = useState('')
   const [selectedUserPin, setSelectedUserPin] = useState('')
 
+  const [showChiefPassword, setShowChiefPassword] = useState(false)
+  const [showCreatePassword, setShowCreatePassword] = useState(false)
+  const [showUserPin, setShowUserPin] = useState(false)
+
   const [chiefPhone, setChiefPhone] = useState('')
   const [chiefPassword, setChiefPassword] = useState('')
 
   const [createName, setCreateName] = useState('')
   const [createOwnerName, setCreateOwnerName] = useState('')
   const [createPhone, setCreatePhone] = useState('')
+  const [createEmail, setCreateEmail] = useState('')
   const [createPassword, setCreatePassword] = useState('')
   const [createConfirmPassword, setCreateConfirmPassword] = useState('')
   const [createStructureCode, setCreateStructureCode] = useState('')
@@ -113,11 +118,15 @@ export default function PinAccessScreen({ route, navigation }) {
         structureCode: payload.session.structureCode || null,
         stationId: payload.session.stationId || payload.session.station_id || null,
         stationName: payload.session.stationName || payload.session.station_name || null,
-        stationCode: payload.session.stationCode || payload.session.station_code || structureCode.trim().toUpperCase(),
+        stationCode:
+          payload.session.stationCode ||
+          payload.session.station_code ||
+          structureCode.trim().toUpperCase(),
         expiresAt: payload.expires_at
       })
 
       Alert.alert('Connexion réussie', 'Bienvenue dans ton espace chef.')
+
       navigation.reset({
         index: 0,
         routes: [{ name: 'ChiefDashboard' }]
@@ -127,6 +136,7 @@ export default function PinAccessScreen({ route, navigation }) {
         error?.response?.data?.message ||
         error?.message ||
         'Impossible de se connecter pour le moment.'
+
       Alert.alert('Connexion impossible', message)
     } finally {
       setLoading(false)
@@ -149,8 +159,13 @@ export default function PinAccessScreen({ route, navigation }) {
       return
     }
 
+    if (!createEmail.trim()) {
+      Alert.alert('Champ manquant', 'Entre l’email du chef.')
+      return
+    }
+
     if (!createStructureCode.trim()) {
-      Alert.alert('Champ manquant', role === 'pump_attendant' ? 'Entre le code station.' : 'Entre le code structure.')
+      Alert.alert('Champ manquant', 'Entre le code structure.')
       return
     }
 
@@ -164,6 +179,11 @@ export default function PinAccessScreen({ route, navigation }) {
       return
     }
 
+    if (createPassword.trim() !== createConfirmPassword.trim()) {
+      Alert.alert('Erreur', 'Les mots de passe ne correspondent pas.')
+      return
+    }
+
     try {
       setLoading(true)
 
@@ -171,6 +191,7 @@ export default function PinAccessScreen({ route, navigation }) {
         name: createName.trim(),
         owner_name: createOwnerName.trim(),
         owner_phone: createPhone.trim(),
+        owner_email: createEmail.trim().toLowerCase(),
         owner_password: createPassword.trim(),
         confirm_password: createConfirmPassword.trim(),
         structure_code: createStructureCode.trim().toUpperCase()
@@ -189,6 +210,7 @@ export default function PinAccessScreen({ route, navigation }) {
         error?.response?.data?.message ||
         error?.message ||
         'Impossible de créer le compte pour le moment.'
+
       Alert.alert('Création impossible', message)
     } finally {
       setLoading(false)
@@ -197,7 +219,12 @@ export default function PinAccessScreen({ route, navigation }) {
 
   async function handleLoadStructureUsers() {
     if (!structureCode.trim()) {
-      Alert.alert('Champ manquant', role === 'pump_attendant' ? 'Entre le code station.' : 'Entre le code structure.')
+      Alert.alert(
+        'Champ manquant',
+        role === 'pump_attendant'
+          ? 'Entre le code station.'
+          : 'Entre le code structure.'
+      )
       return
     }
 
@@ -207,18 +234,23 @@ export default function PinAccessScreen({ route, navigation }) {
 
       const normalizedCode = structureCode.trim().toUpperCase()
       const roleQuery = role === 'pump_attendant' ? 'pump_attendant' : 'driver'
-      const endpoint = role === 'pump_attendant'
-        ? `/auth/station-users/${normalizedCode}?role=${roleQuery}`
-        : `/auth/structure-users/${normalizedCode}?role=${roleQuery}`
+
+      const endpoint =
+        role === 'pump_attendant'
+          ? `/auth/station-users/${normalizedCode}?role=${roleQuery}`
+          : `/auth/structure-users/${normalizedCode}?role=${roleQuery}`
 
       const response = await api.get(endpoint)
-
       const users = response?.data?.data?.users || []
 
       if (!users.length) {
         Alert.alert(
           'Aucun profil trouvé',
-          `Aucun ${role === 'pump_attendant' ? 'pompiste actif trouvé pour cette station' : 'chauffeur actif trouvé pour cette structure'}.`
+          `Aucun ${
+            role === 'pump_attendant'
+              ? 'pompiste actif trouvé pour cette station'
+              : 'chauffeur actif trouvé pour cette structure'
+          }.`
         )
         return
       }
@@ -231,7 +263,10 @@ export default function PinAccessScreen({ route, navigation }) {
       const message =
         error?.response?.data?.message ||
         error?.message ||
-        role === 'pump_attendant' ? 'Impossible de charger les profils de cette station.' : 'Impossible de charger les profils de cette structure.'
+        (role === 'pump_attendant'
+          ? 'Impossible de charger les profils de cette station.'
+          : 'Impossible de charger les profils de cette structure.')
+
       Alert.alert('Accès impossible', message)
     } finally {
       setLoadingUsers(false)
@@ -246,7 +281,7 @@ export default function PinAccessScreen({ route, navigation }) {
 
   async function handleDriverAccess() {
     if (!structureCode.trim()) {
-      Alert.alert('Champ manquant', role === 'pump_attendant' ? 'Entre le code station.' : 'Entre le code structure.')
+      Alert.alert('Champ manquant', 'Entre le code structure.')
       return
     }
 
@@ -285,12 +320,16 @@ export default function PinAccessScreen({ route, navigation }) {
         structureCode: payload.session.structureCode || null,
         stationId: payload.session.stationId || payload.session.station_id || null,
         stationName: payload.session.stationName || payload.session.station_name || null,
-        stationCode: payload.session.stationCode || payload.session.station_code || structureCode.trim().toUpperCase(),
+        stationCode:
+          payload.session.stationCode ||
+          payload.session.station_code ||
+          structureCode.trim().toUpperCase(),
         truckNumber: payload.session.truckNumber || null,
         expiresAt: payload.expires_at
       })
 
       Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
+
       navigation.reset({
         index: 0,
         routes: [{ name: 'DriverDashboard' }]
@@ -300,6 +339,7 @@ export default function PinAccessScreen({ route, navigation }) {
         error?.response?.data?.message ||
         error?.message ||
         'Impossible d’ouvrir l’espace chauffeur.'
+
       Alert.alert('Accès refusé', message)
     } finally {
       setLoading(false)
@@ -308,7 +348,7 @@ export default function PinAccessScreen({ route, navigation }) {
 
   async function handlePumpAccess() {
     if (!structureCode.trim()) {
-      Alert.alert('Champ manquant', role === 'pump_attendant' ? 'Entre le code station.' : 'Entre le code structure.')
+      Alert.alert('Champ manquant', 'Entre le code station.')
       return
     }
 
@@ -347,11 +387,15 @@ export default function PinAccessScreen({ route, navigation }) {
         structureCode: payload.session.structureCode || null,
         stationId: payload.session.stationId || payload.session.station_id || null,
         stationName: payload.session.stationName || payload.session.station_name || null,
-        stationCode: payload.session.stationCode || payload.session.station_code || structureCode.trim().toUpperCase(),
+        stationCode:
+          payload.session.stationCode ||
+          payload.session.station_code ||
+          structureCode.trim().toUpperCase(),
         expiresAt: payload.expires_at
       })
 
       Alert.alert('Accès autorisé', `Bienvenue ${payload.session.userName}.`)
+
       navigation.reset({
         index: 0,
         routes: [{ name: 'PumpAttendantDashboard' }]
@@ -361,10 +405,39 @@ export default function PinAccessScreen({ route, navigation }) {
         error?.response?.data?.message ||
         error?.message ||
         'Impossible d’ouvrir l’espace pompiste.'
+
       Alert.alert('Accès refusé', message)
     } finally {
       setLoading(false)
     }
+  }
+
+  function renderPasswordInput({
+    value,
+    onChangeText,
+    placeholder,
+    visible,
+    onToggle,
+    keyboardType = 'default'
+  }) {
+    return (
+      <View style={styles.passwordBox}>
+        <TextInput
+          {...INPUT_PROPS}
+          style={styles.passwordInput}
+          placeholder={placeholder}
+          value={value}
+          onChangeText={onChangeText}
+          secureTextEntry={!visible}
+          keyboardType={keyboardType}
+          autoCapitalize="none"
+        />
+
+        <TouchableOpacity style={styles.eyeButton} onPress={onToggle}>
+          <Text style={styles.eyeText}>{visible ? 'Masquer' : 'Voir'}</Text>
+        </TouchableOpacity>
+      </View>
+    )
   }
 
   function renderChiefLogin() {
@@ -382,15 +455,26 @@ export default function PinAccessScreen({ route, navigation }) {
           autoCapitalize="none"
         />
 
-        <TextInput
-          {...INPUT_PROPS}
-          style={styles.input}
-          placeholder="Mot de passe"
-          value={chiefPassword}
-          onChangeText={setChiefPassword}
-          secureTextEntry
-          autoCapitalize="none"
-        />
+        {renderPasswordInput({
+          value: chiefPassword,
+          onChangeText: setChiefPassword,
+          placeholder: 'Mot de passe',
+          visible: showChiefPassword,
+          onToggle: () => setShowChiefPassword(!showChiefPassword)
+        })}
+
+        <TouchableOpacity
+          style={styles.forgotButton}
+          onPress={() =>
+            navigation.navigate('ForgotPassword', {
+              type: 'chief'
+            })
+          }
+        >
+          <Text style={[styles.forgotButtonText, { color: screenConfig.accent }]}>
+            Mot de passe oublié ?
+          </Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
@@ -404,7 +488,10 @@ export default function PinAccessScreen({ route, navigation }) {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.switchButton} onPress={() => setMode('register')}>
+        <TouchableOpacity
+          style={styles.switchButton}
+          onPress={() => setMode('register')}
+        >
           <Text style={styles.switchButtonText}>Créer un compte chef</Text>
         </TouchableOpacity>
       </View>
@@ -444,29 +531,37 @@ export default function PinAccessScreen({ route, navigation }) {
         <TextInput
           {...INPUT_PROPS}
           style={styles.input}
+          placeholder="Email du chef"
+          value={createEmail}
+          onChangeText={setCreateEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+
+        <TextInput
+          {...INPUT_PROPS}
+          style={styles.input}
           placeholder="Code structure (ex: TEMYA01)"
           value={createStructureCode}
           onChangeText={(value) => setCreateStructureCode(value.toUpperCase())}
           autoCapitalize="characters"
         />
 
-        <TextInput
-          {...INPUT_PROPS}
-          style={styles.input}
-          placeholder="Mot de passe"
-          value={createPassword}
-          onChangeText={setCreatePassword}
-          secureTextEntry
-        />
+        {renderPasswordInput({
+          value: createPassword,
+          onChangeText: setCreatePassword,
+          placeholder: 'Mot de passe',
+          visible: showCreatePassword,
+          onToggle: () => setShowCreatePassword(!showCreatePassword)
+        })}
 
-        <TextInput
-          {...INPUT_PROPS}
-          style={styles.input}
-          placeholder="Confirmer le mot de passe"
-          value={createConfirmPassword}
-          onChangeText={setCreateConfirmPassword}
-          secureTextEntry
-        />
+        {renderPasswordInput({
+          value: createConfirmPassword,
+          onChangeText: setCreateConfirmPassword,
+          placeholder: 'Confirmer le mot de passe',
+          visible: showCreatePassword,
+          onToggle: () => setShowCreatePassword(!showCreatePassword)
+        })}
 
         <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
@@ -480,7 +575,10 @@ export default function PinAccessScreen({ route, navigation }) {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.switchButton} onPress={() => setMode('login')}>
+        <TouchableOpacity
+          style={styles.switchButton}
+          onPress={() => setMode('login')}
+        >
           <Text style={styles.switchButtonText}>J’ai déjà un compte</Text>
         </TouchableOpacity>
       </View>
@@ -490,7 +588,11 @@ export default function PinAccessScreen({ route, navigation }) {
   function renderStructureAccess() {
     return (
       <View style={styles.block}>
-        <Text style={styles.blockTitle}>{role === 'pump_attendant' ? 'Entrer le code station' : 'Entrer le code structure'}</Text>
+        <Text style={styles.blockTitle}>
+          {role === 'pump_attendant'
+            ? 'Entrer le code station'
+            : 'Entrer le code structure'}
+        </Text>
 
         <TextInput
           {...INPUT_PROPS}
@@ -512,7 +614,11 @@ export default function PinAccessScreen({ route, navigation }) {
           {loadingUsers ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.primaryButtonText}>{role === 'pump_attendant' ? 'Charger les pompistes' : 'Charger les profils'}</Text>
+            <Text style={styles.primaryButtonText}>
+              {role === 'pump_attendant'
+                ? 'Charger les pompistes'
+                : 'Charger les profils'}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -539,9 +645,13 @@ export default function PinAccessScreen({ route, navigation }) {
                 >
                   <View style={styles.userRowLeft}>
                     <Text style={styles.userName}>{user.name}</Text>
+
                     {!!user.truck_number && (
-                      <Text style={styles.userMeta}>Camion : {user.truck_number}</Text>
+                      <Text style={styles.userMeta}>
+                        Camion : {user.truck_number}
+                      </Text>
                     )}
+
                     {!!user.phone && (
                       <Text style={styles.userMeta}>Tél : {user.phone}</Text>
                     )}
@@ -560,29 +670,17 @@ export default function PinAccessScreen({ route, navigation }) {
               )
             })}
 
-            {role === 'driver' && (
-              <TextInput
-                {...INPUT_PROPS}
-                style={styles.input}
-                placeholder="Code PIN chauffeur"
-                value={selectedUserPin}
-                onChangeText={setSelectedUserPin}
-                keyboardType="numeric"
-                secureTextEntry
-              />
-            )}
-
-            {role === 'pump_attendant' && (
-              <TextInput
-                {...INPUT_PROPS}
-                style={styles.input}
-                placeholder="Code PIN pompiste"
-                value={selectedUserPin}
-                onChangeText={setSelectedUserPin}
-                keyboardType="numeric"
-                secureTextEntry
-              />
-            )}
+            {renderPasswordInput({
+              value: selectedUserPin,
+              onChangeText: setSelectedUserPin,
+              placeholder:
+                role === 'pump_attendant'
+                  ? 'Code PIN pompiste'
+                  : 'Code PIN chauffeur',
+              visible: showUserPin,
+              onToggle: () => setShowUserPin(!showUserPin),
+              keyboardType: 'numeric'
+            })}
 
             <TouchableOpacity
               style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
@@ -639,10 +737,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent'
   },
+
   content: {
     padding: 18,
     paddingBottom: 32
   },
+
   heroCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
@@ -655,6 +755,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 2
   },
+
   heroBadge: {
     alignSelf: 'flex-start',
     borderRadius: 999,
@@ -662,23 +763,27 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 12
   },
+
   heroBadgeText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '900',
     letterSpacing: 0.5
   },
+
   heroTitle: {
     fontSize: 24,
     fontWeight: '900',
     color: '#081B33',
     marginBottom: 8
   },
+
   heroSubtitle: {
     fontSize: 14,
     lineHeight: 21,
     color: '#5F6E7D'
   },
+
   block: {
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
@@ -690,12 +795,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 2
   },
+
   blockTitle: {
     fontSize: 18,
     fontWeight: '800',
     color: '#081B33',
     marginBottom: 14
   },
+
   input: {
     backgroundColor: '#F6F9FC',
     borderWidth: 1,
@@ -707,6 +814,47 @@ const styles = StyleSheet.create({
     color: '#081B33',
     marginBottom: 12
   },
+
+  passwordBox: {
+    backgroundColor: '#F6F9FC',
+    borderWidth: 1,
+    borderColor: '#DFE7F0',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#081B33'
+  },
+
+  eyeButton: {
+    paddingLeft: 12,
+    paddingVertical: 8
+  },
+
+  eyeText: {
+    color: '#0F766E',
+    fontWeight: '900',
+    fontSize: 13
+  },
+
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 12,
+    paddingVertical: 4
+  },
+
+  forgotButtonText: {
+    fontWeight: '900',
+    fontSize: 13
+  },
+
   primaryButton: {
     borderRadius: 16,
     paddingVertical: 14,
@@ -714,32 +862,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 2
   },
+
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800'
   },
+
   switchButton: {
     marginTop: 14,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8
   },
+
   switchButtonText: {
     color: '#081B33',
     fontSize: 14,
     fontWeight: '700'
   },
+
   selectionBox: {
     marginTop: 16,
     paddingTop: 8
   },
+
   selectionTitle: {
     fontSize: 16,
     fontWeight: '800',
     color: '#081B33',
     marginBottom: 12
   },
+
   userRow: {
     borderWidth: 1,
     borderColor: '#DFE7F0',
@@ -751,20 +905,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#FFFFFF'
   },
+
   userRowLeft: {
     flex: 1,
     paddingRight: 10
   },
+
   userName: {
     fontSize: 15,
     fontWeight: '800',
     color: '#081B33',
     marginBottom: 4
   },
+
   userMeta: {
     fontSize: 13,
     color: '#5F6E7D'
   },
+
   radio: {
     width: 20,
     height: 20,
@@ -772,11 +930,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#C9D4E0'
   },
+
   backButton: {
     alignSelf: 'center',
     paddingVertical: 10,
     paddingHorizontal: 14
   },
+
   backButtonText: {
     color: '#516173',
     fontSize: 14,

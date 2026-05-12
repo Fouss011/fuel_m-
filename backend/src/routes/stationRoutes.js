@@ -17,7 +17,7 @@ import { authenticateSession } from '../middleware/authSession.js'
 
 const router = Router()
 
-router.post('/', authenticateSession, createStation)
+router.post('/', createStation)
 router.get('/', authenticateSession, getStations)
 
 router.post('/login', stationLogin)

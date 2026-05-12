@@ -12,6 +12,7 @@ import StationAccessScreen from '../screens/StationAccessScreen'
 import PartnerStationsScreen from '../screens/PartnerStationsScreen'
 import StationManagerDashboardScreen from '../screens/StationManagerDashboardScreen'
 import StationAdminScreen from '../screens/StationAdminScreen'
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -101,6 +102,12 @@ export default function AppNavigator() {
         name="StationTransactions"
         component={StationTransactionsScreen}
         options={{ title: 'Transactions station' }}
+      />
+
+      <Stack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
+        options={{ title: 'Mot de passe oublié' }}
       />
     </Stack.Navigator>
   )

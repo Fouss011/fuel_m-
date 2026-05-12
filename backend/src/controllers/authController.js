@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabaseClient.js'
 import { createSessionToken } from '../utils/sessionToken.js'
+import bcrypt from 'bcryptjs'
 
 function normalizeString(value) {
   if (value === undefined || value === null) return null
@@ -274,4 +275,122 @@ export async function getStructureUsersByCode(req, res, next) {
 export function getCurrentSession(req, res) {
   if (!req.auth) return res.status(401).json({ success: false, message: 'Session invalide ou expirée.' })
   return res.json({ success: true, data: req.auth })
+}
+
+export async function forgotChiefPassword(req, res, next) {
+  try {
+    const email = normalizeString(req.body?.email)?.toLowerCase()
+    const newPassword = normalizeString(req.body?.newPassword)
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'L’email du chef est obligatoire.'
+      })
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le nouveau mot de passe est obligatoire.'
+      })
+    }
+
+    if (newPassword.length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le mot de passe doit contenir au moins 4 caractères.'
+      })
+    }
+
+    const { data: structure, error } = await supabase
+      .from('structures')
+      .select('id, name, owner_name, owner_phone, owner_email')
+      .eq('owner_email', email)
+      .maybeSingle()
+
+    if (error) throw error
+
+    if (!structure) {
+      return res.status(404).json({
+        success: false,
+        message: 'Aucun compte chef trouvé avec cet email.'
+      })
+    }
+
+    const { error: updateError } = await supabase
+      .from('structures')
+      .update({
+        owner_password: newPassword
+      })
+      .eq('id', structure.id)
+
+    if (updateError) throw updateError
+
+    return res.json({
+      success: true,
+      message: 'Mot de passe chef modifié avec succès.'
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function forgotStationPassword(req, res, next) {
+  try {
+    const email = normalizeString(req.body?.email)?.toLowerCase()
+    const newPassword = normalizeString(req.body?.newPassword)
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'L’email du responsable station est obligatoire.'
+      })
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le nouveau mot de passe est obligatoire.'
+      })
+    }
+
+    if (newPassword.length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le mot de passe doit contenir au moins 4 caractères.'
+      })
+    }
+
+    const { data: station, error } = await supabase
+      .from('station_accounts')
+      .select('id, name, station_code, email')
+      .eq('email', email)
+      .maybeSingle()
+
+    if (error) throw error
+
+    if (!station) {
+      return res.status(404).json({
+        success: false,
+        message: 'Aucun responsable station trouvé avec cet email.'
+      })
+    }
+
+    const { error: updateError } = await supabase
+      .from('station_accounts')
+      .update({
+  pin_code: newPassword
+})
+      .eq('id', station.id)
+
+    if (updateError) throw updateError
+
+    return res.json({
+      success: true,
+      message: 'Mot de passe station modifié avec succès.'
+    })
+  } catch (error) {
+    next(error)
+  }
 }

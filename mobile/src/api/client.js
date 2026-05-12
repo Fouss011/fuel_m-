@@ -253,4 +253,14 @@ export async function removeStructurePartnerStation(structureId, stationId) {
   return response.data
 }
 
+export async function forgotChiefPassword(payload) {
+  const response = await api.post('/auth/forgot-chief-password', payload)
+  return response.data
+}
+
+export async function forgotStationPassword(payload) {
+  const response = await api.post('/auth/forgot-station-password', payload)
+  return response.data
+}
+
 export default api
