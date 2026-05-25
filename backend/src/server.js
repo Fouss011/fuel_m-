@@ -8,6 +8,8 @@ import fuelRequestRoutes from './routes/fuelRequestRoutes.js'
 import structureRoutes from './routes/structureRoutes.js'
 import userRoutes from './routes/userRoutes.js'
 import stationRoutes from './routes/stationRoutes.js'
+import adminRoutes from './routes/adminRoutes.js'
+
 import { notFound } from './middleware/notFound.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
@@ -39,7 +41,7 @@ app.get('/', (req, res) => {
   res.json({
     success: true,
     message: 'API Fuel Management en ligne',
-    version: '4.0.0-stations'
+    version: '4.1.0-super-admin'
   })
 })
 
@@ -47,14 +49,16 @@ app.get('/api', (req, res) => {
   res.json({
     success: true,
     message: 'Bienvenue sur l’API Gestion Carburant',
-    version: '4.0.0-stations',
+    version: '4.1.0-super-admin',
     routes: {
       health: '/api/health',
       auth: '/api/auth',
       fuelRequests: '/api/fuel-requests',
       structures: '/api/structures',
       users: '/api/users',
-      stations: '/api/stations'
+      stations: '/api/stations',
+      station: '/api/station',
+      admin: '/api/admin'
     }
   })
 })
@@ -75,6 +79,7 @@ app.use('/api/structures', structureRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/stations', stationRoutes)
 app.use('/api/station', stationRoutes) // alias temporaire pour ne pas casser l’ancien front
+app.use('/api/admin', adminRoutes)
 
 app.use(notFound)
 app.use(errorHandler)

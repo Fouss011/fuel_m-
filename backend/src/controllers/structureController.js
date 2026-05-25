@@ -203,6 +203,21 @@ export async function createStructure(req, res, next) {
   is_active: true
 }
 
+const { data: existingUserByPhone, error: existingUserByPhoneError } = await supabase
+  .from('users')
+  .select('id')
+  .eq('phone', cleanOwnerPhone)
+  .maybeSingle()
+
+if (existingUserByPhoneError) throw existingUserByPhoneError
+
+if (existingUserByPhone) {
+  return res.status(409).json({
+    success: false,
+    message: 'Ce numéro est déjà utilisé par un autre compte.'
+  })
+}
+
     const { data: chiefUser, error: chiefUserError } = await supabase
       .from('users')
       .insert([chiefPayload])
