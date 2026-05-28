@@ -14,6 +14,9 @@ import StationManagerDashboardScreen from '../screens/StationManagerDashboardScr
 import StationAdminScreen from '../screens/StationAdminScreen'
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen'
 
+import SuperAdminLoginScreen from '../screens/SuperAdminLoginScreen'
+import SuperAdminDashboardScreen from '../screens/SuperAdminDashboardScreen'
+
 const Stack = createNativeStackNavigator()
 
 export default function AppNavigator() {
@@ -38,77 +41,23 @@ export default function AppNavigator() {
         animation: 'slide_from_right'
       }}
     >
-      <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ title: 'Gestion carburant' }}
-      />
+      <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Gestion carburant' }} />
+      <Stack.Screen name="PinAccess" component={PinAccessScreen} options={{ title: 'Accès sécurisé' }} />
+      <Stack.Screen name="ChiefDashboard" component={ChiefDashboardScreen} options={{ title: 'Espace chef' }} />
+      <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} options={{ title: 'Espace chauffeur' }} />
+      <Stack.Screen name="PumpAttendantDashboard" component={PumpAttendantDashboardScreen} options={{ title: 'Espace pompiste' }} />
 
-      <Stack.Screen
-        name="PinAccess"
-        component={PinAccessScreen}
-        options={{ title: 'Accès sécurisé' }}
-      />
+      <Stack.Screen name="StationLogin" component={StationLoginScreen} options={{ title: 'Accès station' }} />
+      <Stack.Screen name="StationAccess" component={StationAccessScreen} options={{ title: 'Accès pompiste' }} />
+      <Stack.Screen name="PartnerStations" component={PartnerStationsScreen} options={{ title: 'Stations partenaires' }} />
+      <Stack.Screen name="StationManagerDashboard" component={StationManagerDashboardScreen} options={{ title: 'Responsable station' }} />
+      <Stack.Screen name="StationAdmin" component={StationAdminScreen} options={{ title: 'Admin stations' }} />
+      <Stack.Screen name="StationTransactions" component={StationTransactionsScreen} options={{ title: 'Transactions station' }} />
 
-      <Stack.Screen
-        name="ChiefDashboard"
-        component={ChiefDashboardScreen}
-        options={{ title: 'Espace chef' }}
-      />
+      <Stack.Screen name="SuperAdminLogin" component={SuperAdminLoginScreen} options={{ title: 'Super admin' }} />
+      <Stack.Screen name="SuperAdminDashboard" component={SuperAdminDashboardScreen} options={{ title: 'Pilotage global' }} />
 
-      <Stack.Screen
-        name="DriverDashboard"
-        component={DriverDashboardScreen}
-        options={{ title: 'Espace chauffeur' }}
-      />
-
-      <Stack.Screen
-        name="PumpAttendantDashboard"
-        component={PumpAttendantDashboardScreen}
-        options={{ title: 'Espace pompiste' }}
-      />
-
-      <Stack.Screen
-        name="StationLogin"
-        component={StationLoginScreen}
-        options={{ title: 'Accès station' }}
-      />
-
-      <Stack.Screen
-        name="StationAccess"
-        component={StationAccessScreen}
-        options={{ title: 'Accès pompiste' }}
-      />
-
-      <Stack.Screen
-        name="PartnerStations"
-        component={PartnerStationsScreen}
-        options={{ title: 'Stations partenaires' }}
-      />
-
-      <Stack.Screen
-        name="StationManagerDashboard"
-        component={StationManagerDashboardScreen}
-        options={{ title: 'Responsable station' }}
-      />
-
-      <Stack.Screen
-        name="StationAdmin"
-        component={StationAdminScreen}
-        options={{ title: 'Admin stations' }}
-      />
-
-      <Stack.Screen
-        name="StationTransactions"
-        component={StationTransactionsScreen}
-        options={{ title: 'Transactions station' }}
-      />
-
-      <Stack.Screen
-        name="ForgotPassword"
-        component={ForgotPasswordScreen}
-        options={{ title: 'Mot de passe oublié' }}
-      />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Mot de passe oublié' }} />
     </Stack.Navigator>
   )
 }

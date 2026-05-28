@@ -160,6 +160,16 @@ export default function HomeScreen({ navigation }) {
       }
     }
 
+    if (session.role === 'super_admin') {
+  return {
+    title: session.userName || 'Super Admin',
+    subtitle: 'Tu peux reprendre le pilotage global.',
+    accent: '#081B33',
+    icon: '🛡️',
+    targetScreen: 'SuperAdminDashboard'
+  }
+}
+
     return null
   }, [session])
 
@@ -213,7 +223,18 @@ export default function HomeScreen({ navigation }) {
 
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: sessionLabel.accent }]}
-            onPress={() => navigation.navigate(sessionLabel.targetScreen)}
+            onPress={() => {
+  if (session.role === 'super_admin') {
+    navigation.navigate('SuperAdminDashboard', {
+      token: session.token,
+      admin: session.admin,
+      session
+    })
+    return
+  }
+
+  navigation.navigate(sessionLabel.targetScreen)
+}}
           >
             <Text style={styles.primaryButtonText}>Reprendre mon espace</Text>
           </TouchableOpacity>
