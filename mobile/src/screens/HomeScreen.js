@@ -40,7 +40,7 @@ const ACCESS_CARDS = [
     key: 'station_manager',
     title: 'Responsable station',
     subtitle: 'Gestion station',
-    description: 'Créer la station, gérer les pompistes et suivre les transactions réalisées.',
+    description: 'Gérer les pompistes et suivre les transactions réalisées.',
     emoji: '🏪',
     accent: '#7C3AED',
     soft: '#EDE9FE',
@@ -118,6 +118,19 @@ export default function HomeScreen({ navigation }) {
     }
   }
 
+  function openHiddenAdmin() {
+    setAdminTapCount((prev) => {
+      const next = prev + 1
+
+      if (next >= 3) {
+        navigation.navigate('SuperAdminLogin')
+        return 0
+      }
+
+      return next
+    })
+  }
+
   const sessionLabel = useMemo(() => {
     if (!session?.role) return null
 
@@ -162,14 +175,14 @@ export default function HomeScreen({ navigation }) {
     }
 
     if (session.role === 'super_admin') {
-  return {
-    title: session.userName || 'Super Admin',
-    subtitle: 'Tu peux reprendre le pilotage global.',
-    accent: '#081B33',
-    icon: '🛡️',
-    targetScreen: 'SuperAdminDashboard'
-  }
-}
+      return {
+        title: session.userName || 'Super Admin',
+        subtitle: 'Tu peux reprendre le pilotage global.',
+        accent: '#081B33',
+        icon: '🛡️',
+        targetScreen: 'SuperAdminDashboard'
+      }
+    }
 
     return null
   }, [session])
@@ -200,39 +213,7 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.heroTop}>
             <View>
               <Text style={styles.heroBadge}>Session active</Text>
-              <TouchableOpacity
-  activeOpacity={0.9}
-  onPress={() => {
-    setAdminTapCount((prev) => {
-      const next = prev + 1
-
-      if (next >= 3) {
-        navigation.navigate('SuperAdminLogin')
-        return 0
-      }
-
-      return next
-    })
-  }}
->
-  <TouchableOpacity
-  activeOpacity={0.9}
-  onPress={() => {
-    setAdminTapCount((prev) => {
-      const next = prev + 1
-
-      if (next >= 3) {
-        navigation.navigate('SuperAdminLogin')
-        return 0
-      }
-
-      return next
-    })
-  }}
->
-  <Text style={styles.heroTitle}>Gestion carburant</Text>
-</TouchableOpacity>
-</TouchableOpacity>
+              <Text style={styles.heroTitle}>Gestion carburant</Text>
             </View>
 
             <View style={styles.livePill}>
@@ -257,17 +238,17 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: sessionLabel.accent }]}
             onPress={() => {
-  if (session.role === 'super_admin') {
-    navigation.navigate('SuperAdminDashboard', {
-      token: session.token,
-      admin: session.admin,
-      session
-    })
-    return
-  }
+              if (session.role === 'super_admin') {
+                navigation.navigate('SuperAdminDashboard', {
+                  token: session.token,
+                  admin: session.admin,
+                  session
+                })
+                return
+              }
 
-  navigation.navigate(sessionLabel.targetScreen)
-}}
+              navigation.navigate(sessionLabel.targetScreen)
+            }}
           >
             <Text style={styles.primaryButtonText}>Reprendre mon espace</Text>
           </TouchableOpacity>
@@ -332,6 +313,14 @@ export default function HomeScreen({ navigation }) {
         <AccessCard key={item.key} item={item} navigation={navigation} />
       ))}
 
+      <TouchableOpacity
+        activeOpacity={1}
+        style={styles.hiddenAdminTouch}
+        onPress={openHiddenAdmin}
+      >
+        <View />
+      </TouchableOpacity>
+
       <View style={styles.footerNote}>
         <Text style={styles.footerTitle}>Architecture séparée</Text>
         <Text style={styles.footerText}>
@@ -348,12 +337,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent'
   },
   content: {
-  paddingVertical: 24,
-  paddingHorizontal: 16,
-  paddingBottom: 36,
-  width: '100%',
-  alignItems: 'center'
-},
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    paddingBottom: 36,
+    width: '100%',
+    alignItems: 'center'
+  },
   center: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -449,6 +438,8 @@ const styles = StyleSheet.create({
     marginTop: 3
   },
   sectionHeader: {
+    width: '100%',
+    maxWidth: 760,
     marginBottom: 12
   },
   sectionTitle: {
@@ -534,6 +525,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900'
   },
+  hiddenAdminTouch: {
+    width: 100,
+    height: 36,
+    alignSelf: 'center',
+    marginTop: 2,
+    marginBottom: 6,
+    opacity: 0
+  },
   footerNote: {
     width: '100%',
     maxWidth: 760,
@@ -557,6 +556,8 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   sessionCard: {
+    width: '100%',
+    maxWidth: 760,
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
     padding: 22,
