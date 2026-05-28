@@ -215,7 +215,23 @@ export default function HomeScreen({ navigation }) {
     })
   }}
 >
+  <TouchableOpacity
+  activeOpacity={0.9}
+  onPress={() => {
+    setAdminTapCount((prev) => {
+      const next = prev + 1
+
+      if (next >= 3) {
+        navigation.navigate('SuperAdminLogin')
+        return 0
+      }
+
+      return next
+    })
+  }}
+>
   <Text style={styles.heroTitle}>Gestion carburant</Text>
+</TouchableOpacity>
 </TouchableOpacity>
             </View>
 
