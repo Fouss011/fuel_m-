@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { storeSession } from '../api/client'
+import { setStoredSession } from '../api/client'
 import {
   View,
   Text,
@@ -16,8 +16,8 @@ import {
 const API_URL = 'https://backend-withered-sky-4709.fly.dev'
 
 export default function SuperAdminLoginScreen({ navigation }) {
-  const [phone, setPhone] = useState('90000000')
-  const [password, setPassword] = useState('admin1234')
+  const [phone, setPhone] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleLogin() {
@@ -51,7 +51,7 @@ export default function SuperAdminLoginScreen({ navigation }) {
 const admin = data.data?.admin
 const session = data.data?.session
 
-await storeSession({
+await setStoredSession({
   token,
   role: 'super_admin',
   userName: admin?.name || 'Super Admin',
@@ -59,10 +59,18 @@ await storeSession({
   ...session
 })
 
-navigation.replace('SuperAdminDashboard', {
-  token,
-  admin,
-  session
+navigation.reset({
+  index: 0,
+  routes: [
+    {
+      name: 'SuperAdminDashboard',
+      params: {
+        token,
+        admin,
+        session
+      }
+    }
+  ]
 })
     } catch (error) {
       Alert.alert('Erreur réseau', 'Impossible de joindre le serveur.')
