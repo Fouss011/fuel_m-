@@ -98,6 +98,7 @@ function AccessCard({ item, navigation }) {
 export default function HomeScreen({ navigation }) {
   const [session, setSession] = useState(null)
   const [loadingSession, setLoadingSession] = useState(true)
+  const [adminTapCount, setAdminTapCount] = useState(0)
 
   useFocusEffect(
     useCallback(() => {
@@ -199,7 +200,23 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.heroTop}>
             <View>
               <Text style={styles.heroBadge}>Session active</Text>
-              <Text style={styles.heroTitle}>Gestion carburant</Text>
+              <TouchableOpacity
+  activeOpacity={0.9}
+  onPress={() => {
+    setAdminTapCount((prev) => {
+      const next = prev + 1
+
+      if (next >= 3) {
+        navigation.navigate('SuperAdminLogin')
+        return 0
+      }
+
+      return next
+    })
+  }}
+>
+  <Text style={styles.heroTitle}>Gestion carburant</Text>
+</TouchableOpacity>
             </View>
 
             <View style={styles.livePill}>
@@ -315,9 +332,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent'
   },
   content: {
-    padding: 16,
-    paddingBottom: 36
-  },
+  paddingVertical: 24,
+  paddingHorizontal: 16,
+  paddingBottom: 36,
+  width: '100%',
+  alignItems: 'center'
+},
   center: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -330,6 +350,8 @@ const styles = StyleSheet.create({
     fontWeight: '800'
   },
   hero: {
+    width: '100%',
+    maxWidth: 760,
     backgroundColor: '#061A2F',
     borderRadius: 30,
     padding: 22,
@@ -426,6 +448,8 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   accessCard: {
+    width: '100%',
+    maxWidth: 760,
     backgroundColor: '#FFFFFF',
     borderRadius: 26,
     padding: 17,
@@ -495,6 +519,8 @@ const styles = StyleSheet.create({
     fontWeight: '900'
   },
   footerNote: {
+    width: '100%',
+    maxWidth: 760,
     backgroundColor: '#E8F0F8',
     borderRadius: 22,
     padding: 16,

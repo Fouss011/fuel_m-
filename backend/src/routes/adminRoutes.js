@@ -8,7 +8,8 @@ import {
   adminListStructures,
   adminListUsers,
   adminListTransactions,
-  adminSetActive
+  adminSetActive,
+  adminCreateStructure
 } from '../controllers/adminController.js'
 
 const router = Router()
@@ -22,5 +23,6 @@ router.get('/structures', authenticateSession, adminListStructures)
 router.get('/users', authenticateSession, adminListUsers)
 router.get('/transactions', authenticateSession, adminListTransactions)
 router.patch('/:target/:id/active', authenticateSession, adminSetActive)
+router.post('/structures', authenticateSession, adminCreateStructure)
 
 export default router

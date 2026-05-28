@@ -263,4 +263,29 @@ export async function forgotStationPassword(payload) {
   return response.data
 }
 
+export async function adminCreateStructure(payload) {
+  const response = await api.post('/admin/structures', payload)
+  return response.data
+}
+
+export async function adminCreateStation(payload) {
+  const response = await api.post('/admin/stations', payload)
+  return response.data
+}
+
+export async function adminFetchSummary() {
+  const response = await api.get('/admin/summary')
+  return response.data
+}
+
+export async function adminFetchStations() {
+  const response = await api.get('/admin/stations')
+  return response.data
+}
+
+export async function adminFetchTransactions() {
+  const response = await api.get('/admin/transactions')
+  return response.data
+}
+
 export default api

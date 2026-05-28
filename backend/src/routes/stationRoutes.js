@@ -17,7 +17,8 @@ import { authenticateSession } from '../middleware/authSession.js'
 
 const router = Router()
 
-router.post('/', createStation)
+// Création station désactivée côté public.
+// Les stations doivent être créées par le super admin.
 router.get('/', authenticateSession, getStations)
 
 router.post('/login', stationLogin)

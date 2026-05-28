@@ -16,9 +16,6 @@ router.post('/chief-login', chiefLogin)
 router.post('/driver-access', driverAccess)
 router.post('/pump-access', pumpAttendantAccess)
 
-router.post('/forgot-chief-password', forgotChiefPassword)
-router.post('/forgot-station-password', forgotStationPassword)
-
 router.get('/structure-users/:structureCode', getStructureUsersByCode)
 router.get('/me', authenticateSession, getCurrentSession)
 

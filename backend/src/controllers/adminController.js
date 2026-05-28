@@ -325,3 +325,64 @@ export async function adminSetActive(req, res, next) {
     next(error)
   }
 }
+
+export async function adminCreateStructure(req, res, next) {
+  try {
+    if (!isSuperAdmin(req)) {
+      return res.status(403).json({ success: false, message: 'Accès réservé au super admin.' })
+    }
+
+    const name = normalizeString(req.body?.name)
+    const ownerName = normalizeString(req.body?.owner_name)
+    const ownerPhone = normalizePhone(req.body?.owner_phone)
+    const ownerEmail = normalizeString(req.body?.owner_email)?.toLowerCase()
+    const ownerPassword = normalizeString(req.body?.owner_password)
+    const structureCode = normalizeStationCode(req.body?.structure_code)
+
+    if (!name) return res.status(400).json({ success: false, message: 'Nom structure obligatoire.' })
+    if (!ownerName) return res.status(400).json({ success: false, message: 'Nom du chef obligatoire.' })
+    if (!ownerPhone) return res.status(400).json({ success: false, message: 'Téléphone chef obligatoire.' })
+    if (!ownerPassword) return res.status(400).json({ success: false, message: 'Mot de passe chef obligatoire.' })
+    if (!structureCode) return res.status(400).json({ success: false, message: 'Code structure obligatoire.' })
+
+    const { data: structure, error } = await supabase
+      .from('structures')
+      .insert([{
+        name,
+        structure_code: structureCode,
+        owner_name: ownerName,
+        owner_phone: ownerPhone,
+        owner_email: ownerEmail,
+        owner_password: ownerPassword
+      }])
+      .select()
+      .single()
+
+    if (error) throw error
+
+    const { data: chief, error: chiefError } = await supabase
+      .from('users')
+      .insert([{
+        structure_id: structure.id,
+        station_id: null,
+        name: ownerName,
+        phone: ownerPhone,
+        role: 'chief',
+        pin_code: null,
+        is_active: true,
+        created_by: Number(req.auth.userId)
+      }])
+      .select()
+      .single()
+
+    if (chiefError) throw chiefError
+
+    return res.status(201).json({
+      success: true,
+      message: 'Structure et chef créés.',
+      data: { structure, chief }
+    })
+  } catch (error) {
+    next(error)
+  }
+}

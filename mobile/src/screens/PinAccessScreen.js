@@ -464,19 +464,6 @@ export default function PinAccessScreen({ route, navigation }) {
         })}
 
         <TouchableOpacity
-          style={styles.forgotButton}
-          onPress={() =>
-            navigation.navigate('ForgotPassword', {
-              type: 'chief'
-            })
-          }
-        >
-          <Text style={[styles.forgotButtonText, { color: screenConfig.accent }]}>
-            Mot de passe oublié ?
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: screenConfig.accent }]}
           onPress={handleChiefLogin}
           disabled={loading}
@@ -488,12 +475,6 @@ export default function PinAccessScreen({ route, navigation }) {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.switchButton}
-          onPress={() => setMode('register')}
-        >
-          <Text style={styles.switchButtonText}>Créer un compte chef</Text>
-        </TouchableOpacity>
       </View>
     )
   }

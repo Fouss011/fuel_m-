@@ -219,22 +219,6 @@ export default function StationLoginScreen({ navigation }) {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.switchButton,
-            mode === 'create' && styles.switchButtonActive
-          ]}
-          onPress={() => setMode('create')}
-        >
-          <Text
-            style={[
-              styles.switchText,
-              mode === 'create' && styles.switchTextActive
-            ]}
-          >
-            Créer station
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {mode === 'login' ? (
@@ -257,17 +241,6 @@ export default function StationLoginScreen({ navigation }) {
             visible={showLoginPin}
             onToggle={() => setShowLoginPin(!showLoginPin)}
           />
-
-          <TouchableOpacity
-            style={styles.forgotButton}
-            onPress={() =>
-              navigation.navigate('ForgotPassword', {
-                type: 'station'
-              })
-            }
-          >
-            <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.primaryButton}
