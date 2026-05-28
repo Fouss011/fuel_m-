@@ -19,16 +19,23 @@ import {
 const API_URL = 'https://backend-withered-sky-4709.fly.dev'
 
 function formatNumber(value) {
-  const number = Number(value || 0)
-  return new Intl.NumberFormat('fr-FR').format(number)
+  return new Intl.NumberFormat('fr-FR').format(Number(value || 0))
 }
 
-function StatCard({ label, value }) {
+function StatCard({ label, value, active, onPress }) {
   return (
-    <View style={styles.statCard}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    <TouchableOpacity
+      activeOpacity={0.9}
+      style={[styles.statCard, active && styles.statCardActive]}
+      onPress={onPress}
+    >
+      <Text style={[styles.statValue, active && styles.statValueActive]}>
+        {value}
+      </Text>
+      <Text style={[styles.statLabel, active && styles.statLabelActive]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
   )
 }
 
@@ -36,9 +43,14 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
   const token = route?.params?.token
   const admin = route?.params?.admin
 
+  const [activeSection, setActiveSection] = useState('stations')
+
   const [summary, setSummary] = useState(null)
   const [stations, setStations] = useState([])
+  const [structures, setStructures] = useState([])
+  const [users, setUsers] = useState([])
   const [transactions, setTransactions] = useState([])
+
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -67,9 +79,7 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
   const fetchWithAuth = useCallback(
     async (path) => {
       const res = await fetch(`${API_URL}${path}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       })
 
       const data = await res.json()
@@ -85,20 +95,30 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
 
   const loadData = useCallback(async () => {
     if (!token) {
-      Alert.alert('Session manquante', 'Reconnecte-toi au compte super admin.')
+      Alert.alert('Session manquante', 'Reconnecte-toi.')
       navigation.replace('SuperAdminLogin')
       return
     }
 
     try {
-      const [summaryData, stationsData, transactionsData] = await Promise.all([
+      const [
+        summaryData,
+        stationsData,
+        structuresData,
+        usersData,
+        transactionsData
+      ] = await Promise.all([
         fetchWithAuth('/api/admin/summary'),
         fetchWithAuth('/api/admin/stations'),
+        fetchWithAuth('/api/admin/structures'),
+        fetchWithAuth('/api/admin/users'),
         fetchWithAuth('/api/admin/transactions')
       ])
 
       setSummary(summaryData)
       setStations(stationsData || [])
+      setStructures(structuresData || [])
+      setUsers(usersData || [])
       setTransactions(transactionsData || [])
     } catch (error) {
       Alert.alert('Erreur', error.message || 'Impossible de charger les données.')
@@ -118,30 +138,11 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
   }
 
   async function handleCreateStructure() {
-    if (!structureForm.name.trim()) {
-      Alert.alert('Champ requis', 'Entre le nom de la structure.')
-      return
-    }
-
-    if (!structureForm.owner_name.trim()) {
-      Alert.alert('Champ requis', 'Entre le nom du chef.')
-      return
-    }
-
-    if (!structureForm.owner_phone.trim()) {
-      Alert.alert('Champ requis', 'Entre le téléphone du chef.')
-      return
-    }
-
-    if (!structureForm.structure_code.trim()) {
-      Alert.alert('Champ requis', 'Entre le code structure.')
-      return
-    }
-
-    if (!structureForm.owner_password.trim()) {
-      Alert.alert('Champ requis', 'Entre le mot de passe du chef.')
-      return
-    }
+    if (!structureForm.name.trim()) return Alert.alert('Champ requis', 'Nom structure requis.')
+    if (!structureForm.owner_name.trim()) return Alert.alert('Champ requis', 'Nom chef requis.')
+    if (!structureForm.owner_phone.trim()) return Alert.alert('Champ requis', 'Téléphone chef requis.')
+    if (!structureForm.structure_code.trim()) return Alert.alert('Champ requis', 'Code structure requis.')
+    if (!structureForm.owner_password.trim()) return Alert.alert('Champ requis', 'Mot de passe requis.')
 
     try {
       setCreatingStructure(true)
@@ -168,32 +169,16 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
 
       await loadData()
     } catch (error) {
-      Alert.alert(
-        'Erreur',
-        error?.response?.data?.message ||
-          error?.message ||
-          'Impossible de créer la structure.'
-      )
+      Alert.alert('Erreur', error?.response?.data?.message || error.message)
     } finally {
       setCreatingStructure(false)
     }
   }
 
   async function handleCreateStation() {
-    if (!stationForm.name.trim()) {
-      Alert.alert('Champ requis', 'Entre le nom de la station.')
-      return
-    }
-
-    if (!stationForm.station_code.trim()) {
-      Alert.alert('Champ requis', 'Entre le code station.')
-      return
-    }
-
-    if (!stationForm.pin_code.trim()) {
-      Alert.alert('Champ requis', 'Entre le mot de passe/PIN station.')
-      return
-    }
+    if (!stationForm.name.trim()) return Alert.alert('Champ requis', 'Nom station requis.')
+    if (!stationForm.station_code.trim()) return Alert.alert('Champ requis', 'Code station requis.')
+    if (!stationForm.pin_code.trim()) return Alert.alert('Champ requis', 'PIN station requis.')
 
     try {
       setCreatingStation(true)
@@ -222,20 +207,45 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
 
       await loadData()
     } catch (error) {
-      Alert.alert(
-        'Erreur',
-        error?.response?.data?.message ||
-          error?.message ||
-          'Impossible de créer la station.'
-      )
+      Alert.alert('Erreur', error?.response?.data?.message || error.message)
     } finally {
       setCreatingStation(false)
+    }
+  }
+
+  async function handleToggleStation(station) {
+    try {
+      const nextStatus = !station.is_active
+
+      const res = await fetch(`${API_URL}/api/admin/station/${station.id}/active`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ is_active: nextStatus })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Impossible de modifier la station.')
+      }
+
+      Alert.alert('Succès', nextStatus ? 'Station réactivée.' : 'Station désactivée.')
+      await loadData()
+    } catch (error) {
+      Alert.alert('Erreur', error.message || 'Impossible de modifier la station.')
     }
   }
 
   function logout() {
     navigation.replace('Home')
   }
+
+  const drivers = users.filter((u) => u.role === 'driver')
+  const pumps = users.filter((u) => u.role === 'pump_attendant')
+  const chiefs = users.filter((u) => u.role === 'chief')
 
   if (loading) {
     return (
@@ -267,19 +277,47 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
       </View>
 
       <View style={styles.grid}>
-        <StatCard label="Structures" value={formatNumber(summary?.structures_count)} />
-        <StatCard label="Stations" value={formatNumber(summary?.stations_count)} />
-        <StatCard label="Chauffeurs" value={formatNumber(summary?.drivers_count)} />
-        <StatCard label="Pompistes" value={formatNumber(summary?.pump_attendants_count)} />
-        <StatCard label="Transactions" value={formatNumber(summary?.fuel_requests_count)} />
-        <StatCard label="En attente" value={formatNumber(summary?.pending_requests_count)} />
+        <StatCard
+          label="Structures"
+          value={formatNumber(summary?.structures_count)}
+          active={activeSection === 'structures'}
+          onPress={() => setActiveSection('structures')}
+        />
+        <StatCard
+          label="Stations"
+          value={formatNumber(summary?.stations_count)}
+          active={activeSection === 'stations'}
+          onPress={() => setActiveSection('stations')}
+        />
+        <StatCard
+          label="Chauffeurs"
+          value={formatNumber(summary?.drivers_count)}
+          active={activeSection === 'drivers'}
+          onPress={() => setActiveSection('drivers')}
+        />
+        <StatCard
+          label="Pompistes"
+          value={formatNumber(summary?.pump_attendants_count)}
+          active={activeSection === 'pumps'}
+          onPress={() => setActiveSection('pumps')}
+        />
+        <StatCard
+          label="Transactions"
+          value={formatNumber(summary?.fuel_requests_count)}
+          active={activeSection === 'transactions'}
+          onPress={() => setActiveSection('transactions')}
+        />
+        <StatCard
+          label="En attente"
+          value={formatNumber(summary?.pending_requests_count)}
+          active={activeSection === 'pending'}
+          onPress={() => setActiveSection('pending')}
+        />
       </View>
 
       <View style={styles.bigCard}>
         <Text style={styles.darkSectionTitle}>Carburant servi</Text>
-        <Text style={styles.bigNumber}>
-          {formatNumber(summary?.total_served_liters)} L
-        </Text>
+        <Text style={styles.bigNumber}>{formatNumber(summary?.total_served_liters)} L</Text>
         <Text style={styles.bigSub}>
           Montant total : {formatNumber(summary?.total_amount)} F CFA
         </Text>
@@ -288,213 +326,149 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
       <View style={styles.formCard}>
         <Text style={styles.formTitle}>Créer une structure / chef</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Nom structure"
-          value={structureForm.name}
-          onChangeText={(v) => setStructureForm((p) => ({ ...p, name: v }))}
-        />
+        <TextInput style={styles.input} placeholder="Nom structure" value={structureForm.name} onChangeText={(v) => setStructureForm((p) => ({ ...p, name: v }))} />
+        <TextInput style={styles.input} placeholder="Nom du chef" value={structureForm.owner_name} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_name: v }))} />
+        <TextInput style={styles.input} placeholder="Téléphone chef" keyboardType="phone-pad" value={structureForm.owner_phone} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_phone: v }))} />
+        <TextInput style={styles.input} placeholder="Email chef" keyboardType="email-address" autoCapitalize="none" value={structureForm.owner_email} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_email: v }))} />
+        <TextInput style={styles.input} placeholder="Code structure" autoCapitalize="characters" value={structureForm.structure_code} onChangeText={(v) => setStructureForm((p) => ({ ...p, structure_code: v.toUpperCase() }))} />
+        <TextInput style={styles.input} placeholder="Mot de passe chef" secureTextEntry value={structureForm.owner_password} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_password: v }))} />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Nom du chef"
-          value={structureForm.owner_name}
-          onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_name: v }))}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Téléphone chef"
-          keyboardType="phone-pad"
-          value={structureForm.owner_phone}
-          onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_phone: v }))}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email chef"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={structureForm.owner_email}
-          onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_email: v }))}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Code structure"
-          autoCapitalize="characters"
-          value={structureForm.structure_code}
-          onChangeText={(v) =>
-            setStructureForm((p) => ({ ...p, structure_code: v.toUpperCase() }))
-          }
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Mot de passe chef"
-          secureTextEntry
-          value={structureForm.owner_password}
-          onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_password: v }))}
-        />
-
-        <TouchableOpacity
-          style={[styles.createButton, creatingStructure && styles.disabledButton]}
-          onPress={handleCreateStructure}
-          disabled={creatingStructure}
-        >
-          {creatingStructure ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.createButtonText}>Créer structure</Text>
-          )}
+        <TouchableOpacity style={[styles.createButton, creatingStructure && styles.disabledButton]} onPress={handleCreateStructure} disabled={creatingStructure}>
+          {creatingStructure ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.createButtonText}>Créer structure</Text>}
         </TouchableOpacity>
       </View>
 
       <View style={styles.formCard}>
         <Text style={styles.formTitle}>Créer une station</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Nom station"
-          value={stationForm.name}
-          onChangeText={(v) => setStationForm((p) => ({ ...p, name: v }))}
-        />
+        <TextInput style={styles.input} placeholder="Nom station" value={stationForm.name} onChangeText={(v) => setStationForm((p) => ({ ...p, name: v }))} />
+        <TextInput style={styles.input} placeholder="Code station" autoCapitalize="characters" value={stationForm.station_code} onChangeText={(v) => setStationForm((p) => ({ ...p, station_code: v.toUpperCase() }))} />
+        <TextInput style={styles.input} placeholder="Ville / localisation" value={stationForm.location} onChangeText={(v) => setStationForm((p) => ({ ...p, location: v }))} />
+        <TextInput style={styles.input} placeholder="Responsable station" value={stationForm.manager_name} onChangeText={(v) => setStationForm((p) => ({ ...p, manager_name: v }))} />
+        <TextInput style={styles.input} placeholder="Téléphone responsable" keyboardType="phone-pad" value={stationForm.manager_phone} onChangeText={(v) => setStationForm((p) => ({ ...p, manager_phone: v }))} />
+        <TextInput style={styles.input} placeholder="Email responsable" keyboardType="email-address" autoCapitalize="none" value={stationForm.email} onChangeText={(v) => setStationForm((p) => ({ ...p, email: v }))} />
+        <TextInput style={styles.input} placeholder="Mot de passe / PIN station" secureTextEntry value={stationForm.pin_code} onChangeText={(v) => setStationForm((p) => ({ ...p, pin_code: v }))} />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Code station"
-          autoCapitalize="characters"
-          value={stationForm.station_code}
-          onChangeText={(v) =>
-            setStationForm((p) => ({ ...p, station_code: v.toUpperCase() }))
-          }
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Ville / localisation"
-          value={stationForm.location}
-          onChangeText={(v) => setStationForm((p) => ({ ...p, location: v }))}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Responsable station"
-          value={stationForm.manager_name}
-          onChangeText={(v) => setStationForm((p) => ({ ...p, manager_name: v }))}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Téléphone responsable"
-          keyboardType="phone-pad"
-          value={stationForm.manager_phone}
-          onChangeText={(v) => setStationForm((p) => ({ ...p, manager_phone: v }))}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email responsable"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={stationForm.email}
-          onChangeText={(v) => setStationForm((p) => ({ ...p, email: v }))}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Mot de passe / PIN station"
-          secureTextEntry
-          value={stationForm.pin_code}
-          onChangeText={(v) => setStationForm((p) => ({ ...p, pin_code: v }))}
-        />
-
-        <TouchableOpacity
-          style={[styles.createButton, creatingStation && styles.disabledButton]}
-          onPress={handleCreateStation}
-          disabled={creatingStation}
-        >
-          {creatingStation ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.createButtonText}>Créer station</Text>
-          )}
+        <TouchableOpacity style={[styles.createButton, creatingStation && styles.disabledButton]} onPress={handleCreateStation} disabled={creatingStation}>
+          {creatingStation ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.createButtonText}>Créer station</Text>}
         </TouchableOpacity>
       </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Stations</Text>
-        <Text style={styles.sectionCount}>{stations.length}</Text>
-      </View>
-
-      {stations.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Text style={styles.emptyTitle}>Aucune station</Text>
-          <Text style={styles.emptyText}>Les stations créées apparaîtront ici.</Text>
-        </View>
-      ) : (
-        stations.map((station) => (
-          <View key={station.id} style={styles.listCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.listTitle}>{station.name}</Text>
-              <Text style={styles.listMeta}>Code : {station.station_code || '-'}</Text>
-              <Text style={styles.listMeta}>
-                Responsable : {station.manager_name || '-'}
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.statusPill,
-                station.is_active ? styles.statusActive : styles.statusInactive
-              ]}
-            >
-              <Text
-                style={[
-                  styles.statusText,
-                  station.is_active ? styles.statusTextActive : styles.statusTextInactive
-                ]}
-              >
-                {station.is_active ? 'Active' : 'Inactive'}
-              </Text>
-            </View>
-          </View>
-        ))
+      {activeSection === 'structures' && (
+        <>
+          <SectionHeader title="Structures / chefs" count={structures.length} />
+          {structures.map((structure) => {
+            const chief = chiefs.find((u) => Number(u.structure_id) === Number(structure.id))
+            return (
+              <View key={structure.id} style={styles.listCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.listTitle}>{structure.name}</Text>
+                  <Text style={styles.listMeta}>Code : {structure.structure_code || '-'}</Text>
+                  <Text style={styles.listMeta}>Chef : {chief?.name || structure.owner_name || '-'}</Text>
+                  <Text style={styles.listMeta}>Téléphone : {chief?.phone || structure.owner_phone || '-'}</Text>
+                </View>
+              </View>
+            )
+          })}
+        </>
       )}
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Dernières transactions</Text>
-        <Text style={styles.sectionCount}>{transactions.length}</Text>
-      </View>
+      {activeSection === 'stations' && (
+        <>
+          <SectionHeader title="Stations" count={stations.length} />
+          {stations.map((station) => (
+            <View key={station.id} style={styles.listCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.listTitle}>{station.name}</Text>
+                <Text style={styles.listMeta}>Code : {station.station_code || '-'}</Text>
+                <Text style={styles.listMeta}>Responsable : {station.manager_name || '-'}</Text>
+              </View>
 
-      {transactions.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Text style={styles.emptyTitle}>Aucune transaction</Text>
-          <Text style={styles.emptyText}>
-            Les demandes et services carburant apparaîtront ici.
-          </Text>
-        </View>
-      ) : (
-        transactions.slice(0, 20).map((tx) => (
-          <View key={tx.id} style={styles.transactionCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.listTitle}>
-                {tx.driver?.name || tx.driver_name || 'Chauffeur'}
-              </Text>
-              <Text style={styles.listMeta}>
-                Station : {tx.station?.name || tx.station_name || '-'}
-              </Text>
-              <Text style={styles.listMeta}>Statut : {tx.status || '-'}</Text>
-            </View>
+              <View>
+                <View style={[styles.statusPill, station.is_active ? styles.statusActive : styles.statusInactive]}>
+                  <Text style={[styles.statusText, station.is_active ? styles.statusTextActive : styles.statusTextInactive]}>
+                    {station.is_active ? 'Active' : 'Inactive'}
+                  </Text>
+                </View>
 
-            <View style={styles.txRight}>
-              <Text style={styles.txLiters}>
-                {formatNumber(tx.served_liters || tx.approved_liters || tx.requested_liters)} L
-              </Text>
-              <Text style={styles.txAmount}>{formatNumber(tx.amount)} F</Text>
+                <TouchableOpacity
+                  style={[styles.smallDangerButton, !station.is_active && styles.smallSuccessButton]}
+                  onPress={() => handleToggleStation(station)}
+                >
+                  <Text style={styles.smallButtonText}>
+                    {station.is_active ? 'Désactiver' : 'Réactiver'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        ))
+          ))}
+        </>
+      )}
+
+      {activeSection === 'drivers' && (
+        <>
+          <SectionHeader title="Chauffeurs" count={drivers.length} />
+          {drivers.map((driver) => (
+            <View key={driver.id} style={styles.listCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.listTitle}>{driver.name}</Text>
+                <Text style={styles.listMeta}>Téléphone : {driver.phone || '-'}</Text>
+                <Text style={styles.listMeta}>Structure : {driver.structure?.name || '-'}</Text>
+                <Text style={styles.listMeta}>Camion : {driver.truck_number || '-'}</Text>
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+
+      {activeSection === 'pumps' && (
+        <>
+          <SectionHeader title="Pompistes" count={pumps.length} />
+          {pumps.map((pump) => (
+            <View key={pump.id} style={styles.listCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.listTitle}>{pump.name}</Text>
+                <Text style={styles.listMeta}>Téléphone : {pump.phone || '-'}</Text>
+                <Text style={styles.listMeta}>Station : {pump.station?.name || '-'}</Text>
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+
+      {(activeSection === 'transactions' || activeSection === 'pending') && (
+        <>
+          <SectionHeader
+            title={activeSection === 'pending' ? 'Transactions en attente' : 'Dernières transactions'}
+            count={
+              activeSection === 'pending'
+                ? transactions.filter((tx) => tx.status === 'pending').length
+                : transactions.length
+            }
+          />
+
+          {(activeSection === 'pending'
+            ? transactions.filter((tx) => tx.status === 'pending')
+            : transactions
+          ).slice(0, 50).map((tx) => (
+            <View key={tx.id} style={styles.transactionCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.listTitle}>
+                  {tx.driver?.name || tx.driver_name || 'Chauffeur'}
+                </Text>
+                <Text style={styles.listMeta}>Station : {tx.station?.name || tx.station_name || '-'}</Text>
+                <Text style={styles.listMeta}>Statut : {tx.status || '-'}</Text>
+              </View>
+
+              <View style={styles.txRight}>
+                <Text style={styles.txLiters}>
+                  {formatNumber(tx.served_liters || tx.approved_liters || tx.requested_liters)} L
+                </Text>
+                <Text style={styles.txAmount}>{formatNumber(tx.amount)} F</Text>
+              </View>
+            </View>
+          ))}
+        </>
       )}
 
       <View style={{ height: 40 }} />
@@ -502,11 +476,17 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
   )
 }
 
+function SectionHeader({ title, count }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionCount}>{count}</Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: '#07172B'
-  },
+  page: { flex: 1, backgroundColor: '#07172B' },
   content: {
     padding: 16,
     paddingBottom: 40,
@@ -520,11 +500,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  loadingText: {
-    marginTop: 12,
-    color: '#FFFFFF',
-    fontWeight: '700'
-  },
+  loadingText: { marginTop: 12, color: '#FFFFFF', fontWeight: '700' },
   hero: {
     backgroundColor: '#0B2748',
     borderRadius: 28,
@@ -535,39 +511,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12
   },
-  eyebrow: {
-    color: '#93C5FD',
-    fontWeight: '900',
-    fontSize: 12,
-    letterSpacing: 1.2
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 30,
-    fontWeight: '900',
-    marginTop: 4
-  },
-  subtitle: {
-    color: '#C9D8EA',
-    fontSize: 13,
-    marginTop: 6
-  },
+  eyebrow: { color: '#93C5FD', fontWeight: '900', fontSize: 12, letterSpacing: 1.2 },
+  title: { color: '#FFFFFF', fontSize: 30, fontWeight: '900', marginTop: 4 },
+  subtitle: { color: '#C9D8EA', fontSize: 13, marginTop: 6 },
   logoutButton: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999
   },
-  logoutText: {
-    color: '#0B2748',
-    fontWeight: '900',
-    fontSize: 12
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
-  },
+  logoutText: { color: '#0B2748', fontWeight: '900', fontSize: 12 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statCard: {
     width: '48%',
     backgroundColor: '#FFFFFF',
@@ -575,16 +529,11 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 10
   },
-  statValue: {
-    color: '#081B33',
-    fontSize: 26,
-    fontWeight: '900'
-  },
-  statLabel: {
-    color: '#617085',
-    fontWeight: '800',
-    marginTop: 4
-  },
+  statCardActive: { backgroundColor: '#DCEBFF' },
+  statValue: { color: '#081B33', fontSize: 26, fontWeight: '900' },
+  statValueActive: { color: '#0B3B75' },
+  statLabel: { color: '#617085', fontWeight: '800', marginTop: 4 },
+  statLabelActive: { color: '#0B3B75' },
   bigCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 26,
@@ -592,39 +541,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 16
   },
-  darkSectionTitle: {
-    color: '#081B33',
-    fontSize: 20,
-    fontWeight: '900'
-  },
-  sectionTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '900'
-  },
-  bigNumber: {
-    color: '#081B33',
-    fontSize: 36,
-    fontWeight: '900',
-    marginTop: 8
-  },
-  bigSub: {
-    color: '#617085',
-    fontWeight: '800',
-    marginTop: 4
-  },
+  darkSectionTitle: { color: '#081B33', fontSize: 20, fontWeight: '900' },
+  sectionTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
+  bigNumber: { color: '#081B33', fontSize: 36, fontWeight: '900', marginTop: 8 },
+  bigSub: { color: '#617085', fontWeight: '800', marginTop: 4 },
   formCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 18,
     marginBottom: 16
   },
-  formTitle: {
-    color: '#081B33',
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 14
-  },
+  formTitle: { color: '#081B33', fontSize: 18, fontWeight: '900', marginBottom: 14 },
   input: {
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
@@ -642,13 +569,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center'
   },
-  disabledButton: {
-    opacity: 0.65
-  },
-  createButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '900'
-  },
+  disabledButton: { opacity: 0.65 },
+  createButtonText: { color: '#FFFFFF', fontWeight: '900' },
   sectionHeader: {
     marginTop: 6,
     marginBottom: 10,
@@ -673,51 +595,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12
   },
-  listTitle: {
-    color: '#081B33',
-    fontSize: 16,
-    fontWeight: '900'
-  },
-  listMeta: {
-    color: '#64748B',
-    fontSize: 13,
-    marginTop: 3
-  },
-  statusPill: {
+  listTitle: { color: '#081B33', fontSize: 16, fontWeight: '900' },
+  listMeta: { color: '#64748B', fontSize: 13, marginTop: 3 },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  statusActive: { backgroundColor: '#DCFCE7' },
+  statusInactive: { backgroundColor: '#FEE2E2' },
+  statusText: { fontSize: 12, fontWeight: '900' },
+  statusTextActive: { color: '#166534' },
+  statusTextInactive: { color: '#991B1B' },
+  smallDangerButton: {
+    marginTop: 8,
+    backgroundColor: '#FEE2E2',
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 999
   },
-  statusActive: {
-    backgroundColor: '#DCFCE7'
-  },
-  statusInactive: {
-    backgroundColor: '#FEE2E2'
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '900'
-  },
-  statusTextActive: {
-    color: '#166534'
-  },
-  statusTextInactive: {
-    color: '#991B1B'
-  },
-  emptyBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 14
-  },
-  emptyTitle: {
+  smallSuccessButton: { backgroundColor: '#DCFCE7' },
+  smallButtonText: {
     color: '#081B33',
+    fontSize: 11,
     fontWeight: '900',
-    fontSize: 16
-  },
-  emptyText: {
-    color: '#64748B',
-    marginTop: 4
+    textAlign: 'center'
   },
   transactionCard: {
     backgroundColor: '#FFFFFF',
@@ -728,18 +626,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12
   },
-  txRight: {
-    alignItems: 'flex-end'
-  },
-  txLiters: {
-    color: '#0B3B75',
-    fontWeight: '900',
-    fontSize: 16
-  },
-  txAmount: {
-    color: '#64748B',
-    fontWeight: '800',
-    fontSize: 12,
-    marginTop: 4
-  }
+  txRight: { alignItems: 'flex-end' },
+  txLiters: { color: '#0B3B75', fontWeight: '900', fontSize: 16 },
+  txAmount: { color: '#64748B', fontWeight: '800', fontSize: 12, marginTop: 4 }
 })

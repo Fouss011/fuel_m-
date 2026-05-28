@@ -288,4 +288,14 @@ export async function adminFetchTransactions() {
   return response.data
 }
 
+export async function adminFetchStructures() {
+  const response = await api.get('/admin/structures')
+  return response.data
+}
+
+export async function adminFetchUsers() {
+  const response = await api.get('/admin/users')
+  return response.data
+}
+
 export default api
