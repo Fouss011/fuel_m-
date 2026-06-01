@@ -604,7 +604,7 @@ export async function getStationPendingRequests(req, res, next) {
         *,
         driver:users!fuel_requests_driver_id_fkey(id, name, phone, truck_number),
         chief:users!fuel_requests_chief_id_fkey(id, name, phone),
-        station:station_accounts(id, name, station_code, location)
+        station:station_accounts!fuel_requests_station_id_fkey(id, name, station_code, location)
       `)
       .eq('station_id', stationId)
       .eq('status', 'approved')
