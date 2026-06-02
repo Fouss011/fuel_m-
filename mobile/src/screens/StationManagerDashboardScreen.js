@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api, getStoredSession } from '../api/client'
+import { exportFuelReportPdf } from '../utils/pdfExport'
 
 export default function StationManagerDashboardScreen({ navigation }) {
   const [loading, setLoading] = useState(true)
@@ -117,6 +118,25 @@ export default function StationManagerDashboardScreen({ navigation }) {
     }
   }
 
+  async function exportStationPdf() {
+  const rows = transactions.map((item) => ({
+    bon: `BON-${item.id}`,
+    plate: item.truck_number,
+    structure: item.structure_name,
+    liters: item.served_liters,
+    amount: item.amount,
+    station: item.station_name || station?.name,
+    pump: item.pump_attendant?.name,
+    date: item.served_at || item.created_at
+  }))
+
+  await exportFuelReportPdf({
+    title: `Rapport carburant - ${station?.name || 'Station'}`,
+    rows,
+    fileName: 'rapport-station.pdf'
+  })
+}
+
   async function logout() {
     try {
       await AsyncStorage.clear()
@@ -220,6 +240,10 @@ export default function StationManagerDashboardScreen({ navigation }) {
 
             <TouchableOpacity style={styles.logoutButton} onPress={logout}>
               <Text style={styles.logoutButtonText}>Déconnexion</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionButton} onPress={exportStationPdf}>
+              <Text style={styles.actionButtonText}>Exporter PDF</Text>
             </TouchableOpacity>
           </View>
 

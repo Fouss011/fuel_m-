@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { exportFuelReportPdf } from '../utils/pdfExport'
 import {
   View,
   Text,
@@ -130,6 +131,25 @@ export default function ChiefDashboardScreen({ navigation }) {
       setLoading(false)
     }
   }
+
+  async function exportChiefPdf() {
+  const rows = requests.map((item) => ({
+    bon: `BON-${item.id}`,
+    plate: item.truck_number,
+    structure: item.structure_name,
+    liters: item.served_liters || item.approved_liters || item.requested_liters,
+    amount: item.amount,
+    station: item.station_name || item.station?.name,
+    pump: item.pump_attendant?.name,
+    date: item.served_at || item.approved_at || item.created_at
+  }))
+
+  await exportFuelReportPdf({
+    title: `Rapport carburant - ${session?.structureName || 'Structure'}`,
+    rows,
+    fileName: 'rapport-chef.pdf'
+  })
+}
 
   const filteredRequests = useMemo(() => {
     return requests.filter((item) => {
@@ -508,6 +528,13 @@ export default function ChiefDashboardScreen({ navigation }) {
     return (
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Demandes carburant</Text>
+
+        <TouchableOpacity
+  style={styles.partnerButton}
+  onPress={exportChiefPdf}
+>
+  <Text style={styles.partnerButtonText}>Exporter PDF</Text>
+</TouchableOpacity>
 
         <TouchableOpacity
           style={styles.partnerButton}
