@@ -467,6 +467,7 @@ export async function getStationTransactions(req, res, next) {
     }
 
     const date = normalizeString(req.query?.date)
+    const period = normalizeString(req.query?.period)
     const search = normalizeString(req.query?.search || req.query?.structure_name)
 
     let query = supabase
@@ -492,11 +493,12 @@ export async function getStationTransactions(req, res, next) {
       `)
       .eq('station_id', Number(req.auth.stationId))
       .eq('status', 'served')
-      .order('served_at', { ascending: false })
+      .order('served_at', { ascending: false, nullsFirst: false })
 
-    if (date) {
+    if (date && period !== 'all') {
       const start = new Date(`${date}T00:00:00.000Z`)
       const end = new Date(`${date}T23:59:59.999Z`)
+
       if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
         query = query.gte('served_at', start.toISOString()).lte('served_at', end.toISOString())
       }
@@ -515,6 +517,7 @@ export async function getStationTransactions(req, res, next) {
     next(error)
   }
 }
+
 
 export async function getStationSummary(req, res, next) {
   try {
