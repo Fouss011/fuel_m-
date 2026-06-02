@@ -1,3 +1,4 @@
+import { Platform } from 'react-native'
 import * as Print from 'expo-print'
 import * as Sharing from 'expo-sharing'
 
@@ -14,13 +15,7 @@ function dateFr(value) {
   return new Date(value).toLocaleDateString('fr-FR')
 }
 
-export async function exportFuelReportPdf({
-  title = 'Rapport carburant',
-  period = 'Toutes périodes',
-  search = 'Aucune',
-  rows = [],
-  fileName = 'rapport-carburant.pdf'
-}) {
+function buildReportHtml({ title, period, search, rows }) {
   const totalLiters = rows.reduce((sum, row) => sum + Number(row.liters || 0), 0)
   const totalAmount = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
 
@@ -37,10 +32,12 @@ export async function exportFuelReportPdf({
     </tr>
   `).join('')
 
-  const html = `
+  return `
+    <!DOCTYPE html>
     <html>
       <head>
         <meta charset="utf-8" />
+        <title>${title}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
           h1 { font-size: 26px; margin-bottom: 10px; }
@@ -80,13 +77,29 @@ export async function exportFuelReportPdf({
               <th>Date</th>
             </tr>
           </thead>
-          <tbody>
-            ${tableRows}
-          </tbody>
+          <tbody>${tableRows}</tbody>
         </table>
       </body>
     </html>
   `
+}
+
+export async function exportFuelReportPdf({
+  title = 'Rapport carburant',
+  period = 'Toutes périodes',
+  search = 'Aucune',
+  rows = [],
+  fileName = 'rapport-carburant.pdf'
+}) {
+  const html = buildReportHtml({ title, period, search, rows })
+
+  if (Platform.OS === 'web') {
+    const win = window.open('', '_blank')
+    win.document.open()
+    win.document.write(html)
+    win.document.close()
+    return null
+  }
 
   const { uri } = await Print.printToFileAsync({ html })
 
