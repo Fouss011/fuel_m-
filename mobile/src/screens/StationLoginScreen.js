@@ -160,14 +160,18 @@ export default function StationLoginScreen({ navigation }) {
     return (
       <View style={styles.passwordBox}>
         <TextInput
-          {...INPUT_PROPS}
-          value={value}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          secureTextEntry={!visible}
-          style={styles.passwordInput}
-          autoCapitalize="none"
-        />
+  {...INPUT_PROPS}
+  value={value}
+  onChangeText={onChangeText}
+  placeholder={placeholder}
+  secureTextEntry={!visible}
+  style={styles.passwordInput}
+  autoCapitalize="none"
+  autoCorrect={false}
+  autoComplete="off"
+  importantForAutofill="no"
+  blurOnSubmit={false}
+/>
 
         <TouchableOpacity onPress={onToggle}>
           <Text style={styles.eyeText}>

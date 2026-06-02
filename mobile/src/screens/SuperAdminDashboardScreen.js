@@ -18,6 +18,12 @@ import {
 
 const API_URL = 'https://backend-withered-sky-4709.fly.dev'
 
+const INPUT_PROPS = {
+  placeholderTextColor: '#64748B',
+  selectionColor: '#0B3B75',
+  cursorColor: '#0B3B75'
+}
+
 function formatNumber(value) {
   return new Intl.NumberFormat('fr-FR').format(Number(value || 0))
 }
@@ -258,10 +264,11 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
 
   return (
     <ScrollView
-      style={styles.page}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
+  style={styles.page}
+  contentContainerStyle={styles.content}
+  refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+  keyboardShouldPersistTaps="handled"
+>
       <View style={styles.hero}>
         <View style={{ flex: 1 }}>
           <Text style={styles.eyebrow}>SUPER ADMIN</Text>
@@ -326,12 +333,12 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
       <View style={styles.formCard}>
         <Text style={styles.formTitle}>Créer une structure / chef</Text>
 
-        <TextInput style={styles.input} placeholder="Nom structure" value={structureForm.name} onChangeText={(v) => setStructureForm((p) => ({ ...p, name: v }))} />
-        <TextInput style={styles.input} placeholder="Nom du chef" value={structureForm.owner_name} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_name: v }))} />
-        <TextInput style={styles.input} placeholder="Téléphone chef" keyboardType="phone-pad" value={structureForm.owner_phone} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_phone: v }))} />
-        <TextInput style={styles.input} placeholder="Email chef" keyboardType="email-address" autoCapitalize="none" value={structureForm.owner_email} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_email: v }))} />
-        <TextInput style={styles.input} placeholder="Code structure" autoCapitalize="characters" value={structureForm.structure_code} onChangeText={(v) => setStructureForm((p) => ({ ...p, structure_code: v.toUpperCase() }))} />
-        <TextInput style={styles.input} placeholder="Mot de passe chef" secureTextEntry value={structureForm.owner_password} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_password: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Nom structure" value={structureForm.name} onChangeText={(v) => setStructureForm((p) => ({ ...p, name: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Nom du chef" value={structureForm.owner_name} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_name: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Téléphone chef" keyboardType="phone-pad" value={structureForm.owner_phone} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_phone: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Email chef" keyboardType="email-address" autoCapitalize="none" value={structureForm.owner_email} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_email: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Code structure" autoCapitalize="characters" value={structureForm.structure_code} onChangeText={(v) => setStructureForm((p) => ({ ...p, structure_code: v.toUpperCase() }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Mot de passe chef" secureTextEntry value={structureForm.owner_password} onChangeText={(v) => setStructureForm((p) => ({ ...p, owner_password: v }))} />
 
         <TouchableOpacity style={[styles.createButton, creatingStructure && styles.disabledButton]} onPress={handleCreateStructure} disabled={creatingStructure}>
           {creatingStructure ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.createButtonText}>Créer structure</Text>}
@@ -341,13 +348,13 @@ export default function SuperAdminDashboardScreen({ route, navigation }) {
       <View style={styles.formCard}>
         <Text style={styles.formTitle}>Créer une station</Text>
 
-        <TextInput style={styles.input} placeholder="Nom station" value={stationForm.name} onChangeText={(v) => setStationForm((p) => ({ ...p, name: v }))} />
-        <TextInput style={styles.input} placeholder="Code station" autoCapitalize="characters" value={stationForm.station_code} onChangeText={(v) => setStationForm((p) => ({ ...p, station_code: v.toUpperCase() }))} />
-        <TextInput style={styles.input} placeholder="Ville / localisation" value={stationForm.location} onChangeText={(v) => setStationForm((p) => ({ ...p, location: v }))} />
-        <TextInput style={styles.input} placeholder="Responsable station" value={stationForm.manager_name} onChangeText={(v) => setStationForm((p) => ({ ...p, manager_name: v }))} />
-        <TextInput style={styles.input} placeholder="Téléphone responsable" keyboardType="phone-pad" value={stationForm.manager_phone} onChangeText={(v) => setStationForm((p) => ({ ...p, manager_phone: v }))} />
-        <TextInput style={styles.input} placeholder="Email responsable" keyboardType="email-address" autoCapitalize="none" value={stationForm.email} onChangeText={(v) => setStationForm((p) => ({ ...p, email: v }))} />
-        <TextInput style={styles.input} placeholder="Mot de passe / PIN station" secureTextEntry value={stationForm.pin_code} onChangeText={(v) => setStationForm((p) => ({ ...p, pin_code: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Nom station" value={stationForm.name} onChangeText={(v) => setStationForm((p) => ({ ...p, name: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Code station" autoCapitalize="characters" value={stationForm.station_code} onChangeText={(v) => setStationForm((p) => ({ ...p, station_code: v.toUpperCase() }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Ville / localisation" value={stationForm.location} onChangeText={(v) => setStationForm((p) => ({ ...p, location: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Responsable station" value={stationForm.manager_name} onChangeText={(v) => setStationForm((p) => ({ ...p, manager_name: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Téléphone responsable" keyboardType="phone-pad" value={stationForm.manager_phone} onChangeText={(v) => setStationForm((p) => ({ ...p, manager_phone: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Email responsable" keyboardType="email-address" autoCapitalize="none" value={stationForm.email} onChangeText={(v) => setStationForm((p) => ({ ...p, email: v }))} />
+        <TextInput {...INPUT_PROPS} style={styles.input} placeholder="Mot de passe / PIN station" secureTextEntry value={stationForm.pin_code} onChangeText={(v) => setStationForm((p) => ({ ...p, pin_code: v }))} />
 
         <TouchableOpacity style={[styles.createButton, creatingStation && styles.disabledButton]} onPress={handleCreateStation} disabled={creatingStation}>
           {creatingStation ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.createButtonText}>Créer station</Text>}

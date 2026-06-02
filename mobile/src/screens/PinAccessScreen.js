@@ -431,6 +431,10 @@ export default function PinAccessScreen({ route, navigation }) {
           secureTextEntry={!visible}
           keyboardType={keyboardType}
           autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="off"
+          importantForAutofill="no"
+          blurOnSubmit={false}
         />
 
         <TouchableOpacity style={styles.eyeButton} onPress={onToggle}>
