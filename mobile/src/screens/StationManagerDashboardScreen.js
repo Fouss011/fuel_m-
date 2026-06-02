@@ -48,9 +48,13 @@ export default function StationManagerDashboardScreen({ navigation }) {
       })
 
       const [transactionsResponse, attendantsResponse] = await Promise.all([
-        api.get('/station/transactions'),
-        api.get('/station/pump-attendants')
-      ])
+  api.get('/station/transactions', {
+    params: {
+      period: 'all'
+    }
+  }),
+  api.get('/station/pump-attendants')
+])
 
       const transactionData = transactionsResponse?.data?.data || []
       const attendantData =
