@@ -29,117 +29,121 @@ export default function StationManagerDashboardScreen({ navigation }) {
   const [gasolinePrice, setGasolinePrice] = useState('')
   const [savingPrices, setSavingPrices] = useState(false)
 
+  const [editingTransactionId, setEditingTransactionId] = useState(null)
+  const [editLiters, setEditLiters] = useState('')
+  const [editReason, setEditReason] = useState('')
+
   useEffect(() => {
     loadDashboard()
   }, [])
 
   async function loadDashboard() {
-  try {
-    setLoading(true)
+    try {
+      setLoading(true)
 
-    const session = await getStoredSession()
-    const stationId = session?.stationId || session?.station_id
+      const session = await getStoredSession()
+      const stationId = session?.stationId || session?.station_id
 
-    if (!stationId) {
-      Alert.alert('Session invalide', 'Station introuvable dans la session.')
+      if (!stationId) {
+        Alert.alert('Session invalide', 'Station introuvable dans la session.')
+        return
+      }
+
+      setStation({
+        id: stationId,
+        name: session?.stationName || session?.station_name || 'Ma station',
+        station_code: session?.stationCode || session?.station_code
+      })
+
+      const [transactionsResponse, attendantsResponse] = await Promise.all([
+        api.get('/station/transactions', {
+          params: {
+            period: 'all'
+          }
+        }),
+        api.get('/station/pump-attendants')
+      ])
+
+      const transactionData = transactionsResponse?.data?.data || []
+
+      const attendantData =
+        attendantsResponse?.data?.data?.pump_attendants ||
+        attendantsResponse?.data?.pump_attendants ||
+        []
+
+      const stationData =
+        attendantsResponse?.data?.data?.station ||
+        attendantsResponse?.data?.station ||
+        null
+
+      setTransactions(Array.isArray(transactionData) ? transactionData : [])
+      setPumpAttendants(Array.isArray(attendantData) ? attendantData : [])
+
+      if (stationData) {
+        setStation((prev) => ({
+          ...(prev || {}),
+          ...stationData
+        }))
+
+        setDieselPrice(String(stationData.diesel_price_per_liter || ''))
+        setGasolinePrice(String(stationData.gasoline_price_per_liter || ''))
+      }
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        'Impossible de charger le tableau de bord station.'
+
+      Alert.alert('Erreur', message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function saveFuelPrices() {
+    const diesel = Number(String(dieselPrice || '').replace(',', '.'))
+    const gasoline = Number(String(gasolinePrice || '').replace(',', '.'))
+
+    if (!diesel || diesel <= 0) {
+      Alert.alert('Prix invalide', 'Entre un prix gasoil valide.')
       return
     }
 
-    setStation({
-      id: stationId,
-      name: session?.stationName || session?.station_name || 'Ma station',
-      station_code: session?.stationCode || session?.station_code
-    })
-
-    const [transactionsResponse, attendantsResponse] = await Promise.all([
-      api.get('/station/transactions', {
-        params: {
-          period: 'all'
-        }
-      }),
-      api.get('/station/pump-attendants')
-    ])
-
-    const transactionData = transactionsResponse?.data?.data || []
-
-    const attendantData =
-      attendantsResponse?.data?.data?.pump_attendants ||
-      attendantsResponse?.data?.pump_attendants ||
-      []
-
-    const stationData =
-      attendantsResponse?.data?.data?.station ||
-      attendantsResponse?.data?.station ||
-      null
-
-    setTransactions(Array.isArray(transactionData) ? transactionData : [])
-    setPumpAttendants(Array.isArray(attendantData) ? attendantData : [])
-
-    if (stationData) {
-      setStation((prev) => ({
-        ...(prev || {}),
-        ...stationData
-      }))
-
-      setDieselPrice(String(stationData.diesel_price_per_liter || ''))
-      setGasolinePrice(String(stationData.gasoline_price_per_liter || ''))
-    }
-  } catch (error) {
-    const message =
-      error?.response?.data?.message ||
-      'Impossible de charger le tableau de bord station.'
-
-    Alert.alert('Erreur', message)
-  } finally {
-    setLoading(false)
-  }
-}
-
-async function saveFuelPrices() {
-  const diesel = Number(String(dieselPrice || '').replace(',', '.'))
-  const gasoline = Number(String(gasolinePrice || '').replace(',', '.'))
-
-  if (!diesel || diesel <= 0) {
-    Alert.alert('Prix invalide', 'Entre un prix gasoil valide.')
-    return
-  }
-
-  if (!gasoline || gasoline <= 0) {
-    Alert.alert('Prix invalide', 'Entre un prix essence valide.')
-    return
-  }
-
-  try {
-    setSavingPrices(true)
-
-    const response = await api.patch('/station/prices', {
-      diesel_price_per_liter: diesel,
-      gasoline_price_per_liter: gasoline
-    })
-
-    const updatedStation = response?.data?.data
-
-    if (updatedStation) {
-      setStation((prev) => ({
-        ...(prev || {}),
-        ...updatedStation
-      }))
-
-      setDieselPrice(String(updatedStation.diesel_price_per_liter || diesel))
-      setGasolinePrice(String(updatedStation.gasoline_price_per_liter || gasoline))
+    if (!gasoline || gasoline <= 0) {
+      Alert.alert('Prix invalide', 'Entre un prix essence valide.')
+      return
     }
 
-    Alert.alert('Succès', 'Prix carburants mis à jour.')
-  } catch (error) {
-    Alert.alert(
-      'Erreur',
-      error?.response?.data?.message ||
-        'Impossible de mettre à jour les prix carburants.'
-    )
-  } finally {
-    setSavingPrices(false)
+    try {
+      setSavingPrices(true)
+
+      const response = await api.patch('/station/prices', {
+        diesel_price_per_liter: diesel,
+        gasoline_price_per_liter: gasoline
+      })
+
+      const updatedStation = response?.data?.data
+
+      if (updatedStation) {
+        setStation((prev) => ({
+          ...(prev || {}),
+          ...updatedStation
+        }))
+
+        setDieselPrice(String(updatedStation.diesel_price_per_liter || diesel))
+        setGasolinePrice(String(updatedStation.gasoline_price_per_liter || gasoline))
+      }
+
+      Alert.alert('Succès', 'Prix carburants mis à jour.')
+    } catch (error) {
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message ||
+          'Impossible de mettre à jour les prix carburants.'
+      )
+    } finally {
+      setSavingPrices(false)
+    }
   }
-}
 
   async function createPumpAttendant() {
     try {
@@ -183,24 +187,54 @@ async function saveFuelPrices() {
     }
   }
 
-  async function exportStationPdf() {
-  const rows = transactions.map((item) => ({
-    bon: `BON-${item.id}`,
-    plate: item.truck_number,
-    structure: item.structure_name,
-    liters: item.served_liters,
-    amount: item.amount,
-    station: item.station_name || station?.name,
-    pump: item.pump_attendant?.name,
-    date: item.served_at || item.created_at
-  }))
+  async function updateServedTransaction(item, liters, reason) {
+    const servedLiters = Number(String(liters || '').replace(',', '.'))
 
-  await exportFuelReportPdf({
-    title: `Rapport carburant - ${station?.name || 'Station'}`,
-    rows,
-    fileName: 'rapport-station.pdf'
-  })
-}
+    if (!servedLiters || servedLiters <= 0) {
+      Alert.alert('Quantité invalide', 'Entre une quantité valide.')
+      return
+    }
+
+    try {
+      await api.patch(`/fuel-requests/${item.id}/edit-served`, {
+        served_liters: servedLiters,
+        reason: reason || null
+      })
+
+      Alert.alert('Succès', 'Transaction modifiée.')
+
+      setEditingTransactionId(null)
+      setEditLiters('')
+      setEditReason('')
+
+      await loadDashboard()
+    } catch (error) {
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message ||
+          'Impossible de modifier la transaction.'
+      )
+    }
+  }
+
+  async function exportStationPdf() {
+    const rows = transactions.map((item) => ({
+      bon: `BON-${item.id}`,
+      plate: item.truck_number,
+      structure: item.structure_name,
+      liters: item.served_liters,
+      amount: item.amount,
+      station: item.station_name || station?.name,
+      pump: item.pump_attendant?.name,
+      date: item.served_at || item.created_at
+    }))
+
+    await exportFuelReportPdf({
+      title: `Rapport carburant - ${station?.name || 'Station'}`,
+      rows,
+      fileName: 'rapport-station.pdf'
+    })
+  }
 
   async function logout() {
     try {
@@ -333,47 +367,57 @@ async function saveFuelPrices() {
             ) : null}
 
             {transactions.map((item) => (
-              <TransactionCard key={String(item.id)} item={item} />
+              <TransactionCard
+                key={String(item.id)}
+                item={item}
+                editingTransactionId={editingTransactionId}
+                setEditingTransactionId={setEditingTransactionId}
+                editLiters={editLiters}
+                setEditLiters={setEditLiters}
+                editReason={editReason}
+                setEditReason={setEditReason}
+                onSave={updateServedTransaction}
+              />
             ))}
           </View>
         </>
       ) : (
         <>
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Prix carburants</Text>
+            <Text style={styles.sectionText}>
+              Ces prix seront utilisés automatiquement pour calculer le montant des transactions servies.
+            </Text>
 
-        <View style={styles.sectionCard}>
-  <Text style={styles.sectionTitle}>Prix carburants</Text>
-  <Text style={styles.sectionText}>
-    Ces prix seront utilisés automatiquement pour calculer le montant des transactions servies.
-  </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Prix gasoil / litre"
+              placeholderTextColor="#64748B"
+              value={dieselPrice}
+              onChangeText={setDieselPrice}
+              keyboardType="numeric"
+            />
 
-  <TextInput
-    style={styles.input}
-    placeholder="Prix gasoil / litre"
-    placeholderTextColor="#64748B"
-    value={dieselPrice}
-    onChangeText={setDieselPrice}
-    keyboardType="numeric"
-  />
+            <TextInput
+              style={styles.input}
+              placeholder="Prix essence / litre"
+              placeholderTextColor="#64748B"
+              value={gasolinePrice}
+              onChangeText={setGasolinePrice}
+              keyboardType="numeric"
+            />
 
-  <TextInput
-    style={styles.input}
-    placeholder="Prix essence / litre"
-    placeholderTextColor="#64748B"
-    value={gasolinePrice}
-    onChangeText={setGasolinePrice}
-    keyboardType="numeric"
-  />
+            <TouchableOpacity
+              style={[styles.createButton, savingPrices && styles.disabledButton]}
+              onPress={saveFuelPrices}
+              disabled={savingPrices}
+            >
+              <Text style={styles.createButtonText}>
+                {savingPrices ? 'Enregistrement...' : 'Enregistrer les prix'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-  <TouchableOpacity
-    style={[styles.createButton, savingPrices && styles.disabledButton]}
-    onPress={saveFuelPrices}
-    disabled={savingPrices}
-  >
-    <Text style={styles.createButtonText}>
-      {savingPrices ? 'Enregistrement...' : 'Enregistrer les prix'}
-    </Text>
-  </TouchableOpacity>
-</View>
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Créer un pompiste</Text>
             <Text style={styles.sectionText}>
@@ -472,7 +516,16 @@ function PumpAttendantCard({ item }) {
   )
 }
 
-function TransactionCard({ item }) {
+function TransactionCard({
+  item,
+  editingTransactionId,
+  setEditingTransactionId,
+  editLiters,
+  setEditLiters,
+  editReason,
+  setEditReason,
+  onSave
+}) {
   const structureName =
     item.structure_name ||
     item.structure?.name ||
@@ -492,6 +545,7 @@ function TransactionCard({ item }) {
 
   const liters = item.served_liters || item.quantity_liters || 0
   const amount = item.final_amount || item.total_amount || item.amount || 0
+  const isEditing = editingTransactionId === item.id
 
   return (
     <View style={styles.transactionCard}>
@@ -525,6 +579,58 @@ function TransactionCard({ item }) {
         </Text>
       </View>
 
+      {isEditing ? (
+        <View style={{ marginTop: 12 }}>
+          <TextInput
+            style={styles.input}
+            placeholder="Nouvelle quantité servie"
+            placeholderTextColor="#64748B"
+            value={editLiters}
+            onChangeText={setEditLiters}
+            keyboardType="numeric"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Motif de correction"
+            placeholderTextColor="#64748B"
+            value={editReason}
+            onChangeText={setEditReason}
+          />
+
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={() => {
+                setEditingTransactionId(null)
+                setEditLiters('')
+                setEditReason('')
+              }}
+            >
+              <Text style={styles.logoutButtonText}>Annuler</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => onSave(item, editLiters, editReason)}
+            >
+              <Text style={styles.actionButtonText}>Enregistrer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={[styles.actionButton, { marginTop: 12 }]}
+          onPress={() => {
+            setEditingTransactionId(item.id)
+            setEditLiters(String(liters || ''))
+            setEditReason('')
+          }}
+        >
+          <Text style={styles.actionButtonText}>Modifier</Text>
+        </TouchableOpacity>
+      )}
+
       {item.served_at || item.created_at ? (
         <Text style={styles.dateText}>
           {new Date(item.served_at || item.created_at).toLocaleString('fr-FR')}
@@ -539,12 +645,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#EEF6FB'
   },
-
   content: {
     padding: 16,
     paddingBottom: 40
   },
-
   center: {
     flex: 1,
     backgroundColor: '#EEF6FB',
@@ -552,20 +656,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24
   },
-
   loadingText: {
     marginTop: 12,
     color: '#475569',
     fontWeight: '800'
   },
-
   header: {
     backgroundColor: '#002B45',
     borderRadius: 26,
     padding: 22,
     marginBottom: 16
   },
-
   headerSmall: {
     color: '#A7F3D0',
     fontWeight: '900',
@@ -573,40 +674,34 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 8
   },
-
   headerTitle: {
     color: '#FFFFFF',
     fontSize: 26,
     fontWeight: '900'
   },
-
   headerText: {
     color: '#D6E4F0',
     marginTop: 10,
     lineHeight: 21,
     fontWeight: '700'
   },
-
   stationCodeBox: {
     backgroundColor: '#013A5C',
     borderRadius: 18,
     padding: 14,
     marginTop: 16
   },
-
   stationCodeLabel: {
     color: '#9DB8CA',
     fontWeight: '900',
     fontSize: 12
   },
-
   stationCodeValue: {
     color: '#FFFFFF',
     fontSize: 22,
     fontWeight: '900',
     marginTop: 4
   },
-
   tabs: {
     flexDirection: 'row',
     backgroundColor: '#DDECF6',
@@ -614,33 +709,27 @@ const styles = StyleSheet.create({
     padding: 5,
     marginBottom: 16
   },
-
   tabButton: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center'
   },
-
   tabButtonActive: {
     backgroundColor: '#002B45'
   },
-
   tabText: {
     color: '#48657A',
     fontWeight: '900'
   },
-
   tabTextActive: {
     color: '#FFFFFF'
   },
-
   actionsRow: {
     flexDirection: 'row',
     gap: 10,
     marginBottom: 16
   },
-
   actionButton: {
     flex: 1,
     backgroundColor: '#0F766E',
@@ -648,12 +737,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center'
   },
-
   actionButtonText: {
     color: '#FFFFFF',
     fontWeight: '900'
   },
-
   logoutButton: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -663,19 +750,16 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center'
   },
-
   logoutButtonText: {
     color: '#B91C1C',
     fontWeight: '900'
   },
-
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: 18
   },
-
   statCard: {
     width: '48%',
     backgroundColor: '#FFFFFF',
@@ -685,23 +769,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D2E3EF'
   },
-
   statValue: {
     color: '#002B45',
     fontSize: 21,
     fontWeight: '900'
   },
-
   statLabel: {
     color: '#526D82',
     marginTop: 5,
     fontWeight: '800'
   },
-
   section: {
     marginTop: 4
   },
-
   sectionCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
@@ -710,21 +790,18 @@ const styles = StyleSheet.create({
     borderColor: '#D2E3EF',
     marginBottom: 18
   },
-
   sectionTitle: {
     color: '#0F172A',
     fontSize: 20,
     fontWeight: '900',
     marginBottom: 8
   },
-
   sectionText: {
     color: '#526D82',
     fontWeight: '700',
     lineHeight: 20,
     marginBottom: 14
   },
-
   input: {
     backgroundColor: '#F8FBFD',
     borderWidth: 1,
@@ -736,7 +813,6 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontWeight: '800'
   },
-
   createButton: {
     backgroundColor: '#0F766E',
     borderRadius: 16,
@@ -744,16 +820,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4
   },
-
   disabledButton: {
     opacity: 0.6
   },
-
   createButtonText: {
     color: '#FFFFFF',
     fontWeight: '900'
   },
-
   emptyCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
@@ -761,20 +834,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D2E3EF'
   },
-
   emptyTitle: {
     color: '#0F172A',
     fontSize: 18,
     fontWeight: '900'
   },
-
   emptyText: {
     color: '#64748B',
     marginTop: 6,
     fontWeight: '700',
     lineHeight: 20
   },
-
   personCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -786,7 +856,6 @@ const styles = StyleSheet.create({
     borderColor: '#D2E3EF',
     gap: 12
   },
-
   avatar: {
     width: 42,
     height: 42,
@@ -795,38 +864,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-
   avatarText: {
     color: '#002B45',
     fontWeight: '900',
     fontSize: 18
   },
-
   personName: {
     color: '#0F172A',
     fontWeight: '900',
     fontSize: 16
   },
-
   personMeta: {
     color: '#64748B',
     fontWeight: '700',
     marginTop: 3
   },
-
   activePill: {
     backgroundColor: '#ECFDF5',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6
   },
-
   activeText: {
     color: '#0F766E',
     fontWeight: '900',
     fontSize: 12
   },
-
   transactionCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
@@ -835,59 +898,50 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D2E3EF'
   },
-
   transactionTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     marginBottom: 12
   },
-
   transactionTitle: {
     color: '#0F172A',
     fontSize: 17,
     fontWeight: '900'
   },
-
   transactionSub: {
     color: '#64748B',
     marginTop: 3,
     fontWeight: '700'
   },
-
   statusPill: {
     backgroundColor: '#ECFDF5',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6
   },
-
   statusText: {
     color: '#0F766E',
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase'
   },
-
   transactionLine: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 6,
     gap: 12
   },
-
   transactionMeta: {
     color: '#64748B',
     fontWeight: '700'
   },
-
   transactionValue: {
     color: '#0F172A',
     fontWeight: '900',
     flexShrink: 1,
     textAlign: 'right'
   },
-
   dateText: {
     color: '#94A3B8',
     fontWeight: '700',

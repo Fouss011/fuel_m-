@@ -70,6 +70,10 @@ export default function ChiefDashboardScreen({ navigation }) {
   const [editingTruck, setEditingTruck] = useState('')
   const [editingPin, setEditingPin] = useState('')
 
+  const [editingTransactionId, setEditingTransactionId] = useState(null)
+  const [editLiters, setEditLiters] = useState('')
+  const [editReason, setEditReason] = useState('')
+
   useFocusEffect(
     useCallback(() => {
       loadAll()
@@ -133,23 +137,57 @@ export default function ChiefDashboardScreen({ navigation }) {
   }
 
   async function exportChiefPdf() {
-  const rows = requests.map((item) => ({
-    bon: `BON-${item.id}`,
-    plate: item.truck_number,
-    structure: item.structure_name,
-    liters: item.served_liters || item.approved_liters || item.requested_liters,
-    amount: item.amount,
-    station: item.station_name || item.station?.name,
-    pump: item.pump_attendant?.name,
-    date: item.served_at || item.approved_at || item.created_at
-  }))
+    const rows = requests.map((item) => ({
+      bon: `BON-${item.id}`,
+      plate: item.truck_number,
+      structure: item.structure_name,
+      liters: item.served_liters || item.approved_liters || item.requested_liters,
+      amount: item.amount,
+      station: item.station_name || item.station?.name,
+      pump: item.pump_attendant?.name,
+      date: item.served_at || item.approved_at || item.created_at
+    }))
 
-  await exportFuelReportPdf({
-    title: `Rapport carburant - ${session?.structureName || 'Structure'}`,
-    rows,
-    fileName: 'rapport-chef.pdf'
-  })
-}
+    await exportFuelReportPdf({
+      title: `Rapport carburant - ${session?.structureName || 'Structure'}`,
+      rows,
+      fileName: 'rapport-chef.pdf'
+    })
+  }
+
+  async function updateServedTransaction(item, liters, reason) {
+    const servedLiters = Number(String(liters || '').replace(',', '.'))
+
+    if (!servedLiters || servedLiters <= 0) {
+      Alert.alert('Quantité invalide', 'Entre une quantité valide.')
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      await api.patch(`/fuel-requests/${item.id}/edit-served`, {
+        served_liters: servedLiters,
+        reason: reason || null
+      })
+
+      Alert.alert('Succès', 'Transaction modifiée.')
+
+      setEditingTransactionId(null)
+      setEditLiters('')
+      setEditReason('')
+
+      await loadAll()
+    } catch (error) {
+      Alert.alert(
+        'Erreur',
+        error?.response?.data?.message ||
+          'Impossible de modifier la transaction.'
+      )
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredRequests = useMemo(() => {
     return requests.filter((item) => {
@@ -473,6 +511,66 @@ export default function ChiefDashboardScreen({ navigation }) {
     )
   }
 
+  function renderServedEditBlock(item) {
+    if (item.status !== 'served') return null
+
+    if (editingTransactionId === item.id) {
+      return (
+        <View style={{ marginTop: 12 }}>
+          <TextInput
+            {...INPUT_PROPS}
+            style={styles.input}
+            placeholder="Nouvelle quantité servie"
+            value={editLiters}
+            onChangeText={setEditLiters}
+            keyboardType="numeric"
+          />
+
+          <TextInput
+            {...INPUT_PROPS}
+            style={styles.input}
+            placeholder="Motif de correction"
+            value={editReason}
+            onChangeText={setEditReason}
+          />
+
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.rejectButton]}
+              onPress={() => {
+                setEditingTransactionId(null)
+                setEditLiters('')
+                setEditReason('')
+              }}
+            >
+              <Text style={styles.actionButtonText}>Annuler</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.approveButton]}
+              onPress={() => updateServedTransaction(item, editLiters, editReason)}
+            >
+              <Text style={styles.actionButtonText}>Enregistrer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )
+    }
+
+    return (
+      <TouchableOpacity
+        style={[styles.actionButton, styles.editButton, { marginTop: 12 }]}
+        onPress={() => {
+          setEditingTransactionId(item.id)
+          setEditLiters(String(item.served_liters || ''))
+          setEditReason('')
+        }}
+      >
+        <Text style={styles.actionButtonText}>Modifier transaction</Text>
+      </TouchableOpacity>
+    )
+  }
+
   function renderRequestItem({ item }) {
     return (
       <View style={styles.requestCard}>
@@ -520,6 +618,8 @@ export default function ChiefDashboardScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         ) : null}
+
+        {renderServedEditBlock(item)}
       </View>
     )
   }
@@ -530,11 +630,11 @@ export default function ChiefDashboardScreen({ navigation }) {
         <Text style={styles.sectionTitle}>Demandes carburant</Text>
 
         <TouchableOpacity
-  style={styles.partnerButton}
-  onPress={exportChiefPdf}
->
-  <Text style={styles.partnerButtonText}>Exporter PDF</Text>
-</TouchableOpacity>
+          style={styles.partnerButton}
+          onPress={exportChiefPdf}
+        >
+          <Text style={styles.partnerButtonText}>Exporter PDF</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.partnerButton}
@@ -1166,8 +1266,7 @@ const styles = StyleSheet.create({
     marginLeft: 8
   },
   editButton: {
-    backgroundColor: '#2563EB',
-    marginRight: 8
+    backgroundColor: '#2563EB'
   },
   deleteButton: {
     backgroundColor: '#B91C1C',

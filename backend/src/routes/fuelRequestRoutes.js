@@ -5,7 +5,8 @@ import {
   getFuelRequestById,
   approveFuelRequest,
   rejectFuelRequest,
-  serveFuelRequest
+  serveFuelRequest,
+  updateServedFuelRequest
 } from '../controllers/fuelRequestController.js'
 import { authenticateSession } from '../middleware/authSession.js'
 
@@ -20,5 +21,6 @@ router.post('/', createFuelRequest)
 router.patch('/:id/approve', approveFuelRequest)
 router.patch('/:id/reject', rejectFuelRequest)
 router.patch('/:id/serve', serveFuelRequest)
+router.patch('/:id/edit-served', authenticateSession, updateServedFuelRequest)
 
 export default router

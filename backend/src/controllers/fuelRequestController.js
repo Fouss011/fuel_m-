@@ -487,3 +487,81 @@ const calculatedAmount = servedLiters * unitPrice
     next(error)
   }
 }
+
+export async function updateServedFuelRequest(req, res, next) {
+  try {
+    if (!req.auth) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session invalide.'
+      })
+    }
+
+    const allowedRoles = ['chief', 'station_manager']
+
+    if (!allowedRoles.includes(req.auth.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé.'
+      })
+    }
+
+    const id = Number(req.params.id)
+    const servedLiters = Number(req.body?.served_liters)
+    if (!servedLiters || servedLiters <= 0) {
+  return res.status(400).json({
+    success: false,
+    message: 'Quantité invalide.'
+  })
+}
+    const reason = String(req.body?.reason || '').trim()
+
+    const existing = await getFuelRequestByIdInternal(id)
+
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Transaction introuvable.'
+      })
+    }
+
+    if (existing.status !== 'served') {
+      return res.status(400).json({
+        success: false,
+        message: 'Seules les transactions servies peuvent être modifiées.'
+      })
+    }
+
+    const station = await getStationById(existing.station_id)
+
+    const unitPrice =
+      existing.fuel_type === 'essence'
+        ? Number(station.gasoline_price_per_liter || 0)
+        : Number(station.diesel_price_per_liter || 0)
+
+    const amount = servedLiters * unitPrice
+
+    const { data, error } = await supabase
+      .from('fuel_requests')
+      .update({
+        served_liters: servedLiters,
+        amount,
+        edited_at: new Date().toISOString(),
+        edited_by: req.auth.userId,
+        edit_reason: reason || null
+      })
+      .eq('id', id)
+      .select(baseFuelRequestSelect())
+      .single()
+
+    if (error) throw error
+
+    return res.json({
+      success: true,
+      message: 'Transaction modifiée.',
+      data
+    })
+  } catch (error) {
+    next(error)
+  }
+}
