@@ -11,7 +11,8 @@ import {
   removePartnerStation,
   getStationTransactions,
   getStationSummary,
-  getStationPendingRequests
+  getStationPendingRequests,
+  updateStationFuelPrices
 } from '../controllers/stationController.js'
 import { authenticateSession } from '../middleware/authSession.js'
 
@@ -37,6 +38,7 @@ router.post('/:stationId/pump-attendants', authenticateSession, createStationPum
 
 router.get('/:stationId/pending-requests', authenticateSession, getStationPendingRequests)
 
+router.patch('/prices', authenticateSession, updateStationFuelPrices)
 router.get('/transactions', authenticateSession, getStationTransactions)
 router.get('/summary', authenticateSession, getStationSummary)
 

@@ -31,7 +31,9 @@ function buildStationSession(station) {
     role: 'station_manager',
     stationId: station.id,
     stationName: station.name,
-    stationCode: station.station_code
+    stationCode: station.station_code,
+    diesel_price_per_liter: station.diesel_price_per_liter,
+    gasoline_price_per_liter: station.gasoline_price_per_liter
   }
 
   return {
@@ -54,7 +56,9 @@ function sanitizeStation(station) {
     manager_name: station.manager_name || null,
     manager_phone: station.manager_phone || null,
     is_active: station.is_active,
-    created_at: station.created_at
+    created_at: station.created_at,
+    diesel_price_per_liter: station.diesel_price_per_liter || null,
+    gasoline_price_per_liter: station.gasoline_price_per_liter || null
   }
 }
 
@@ -213,7 +217,7 @@ export async function stationLogin(req, res, next) {
 
     const { data: station, error } = await supabase
       .from('station_accounts')
-      .select('id, name, station_code, pin_code, is_active')
+      .select('id, name, station_code, pin_code, is_active, diesel_price_per_liter, gasoline_price_per_liter')
       .eq('station_code', stationCode)
       .maybeSingle()
 
@@ -330,7 +334,7 @@ export async function getStationPumpAttendants(req, res, next) {
 
     const { data: station, error: stationError } = await supabase
       .from('station_accounts')
-      .select('id, name, station_code, location, manager_name, manager_phone, is_active, created_at')
+      .select('id, name, station_code, location, manager_name, manager_phone, is_active, created_at, diesel_price_per_liter, gasoline_price_per_liter')
       .eq('id', stationId)
       .eq('is_active', true)
       .maybeSingle()
@@ -455,6 +459,55 @@ export async function removePartnerStation(req, res, next) {
     if (error) throw error
 
     return res.json({ success: true, message: 'Station partenaire retirée.' })
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function updateStationFuelPrices(req, res, next) {
+  try {
+    if (!ensureStationManager(req)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès réservé au responsable station.'
+      })
+    }
+
+    const stationId = Number(req.auth.stationId)
+    const dieselPrice = Number(req.body?.diesel_price_per_liter)
+    const gasolinePrice = Number(req.body?.gasoline_price_per_liter)
+
+    if (!dieselPrice || dieselPrice <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Prix gasoil invalide.'
+      })
+    }
+
+    if (!gasolinePrice || gasolinePrice <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Prix essence invalide.'
+      })
+    }
+
+    const { data, error } = await supabase
+      .from('station_accounts')
+      .update({
+        diesel_price_per_liter: dieselPrice,
+        gasoline_price_per_liter: gasolinePrice
+      })
+      .eq('id', stationId)
+      .select('id, name, station_code, location, manager_name, manager_phone, is_active, created_at, diesel_price_per_liter, gasoline_price_per_liter')
+      .single()
+
+    if (error) throw error
+
+    return res.json({
+      success: true,
+      message: 'Prix carburants mis à jour.',
+      data: sanitizeStation(data)
+    })
   } catch (error) {
     next(error)
   }

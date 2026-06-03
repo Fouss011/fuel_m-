@@ -67,7 +67,7 @@ async function getUserById(userId) {
 async function getStationById(stationId) {
   const { data, error } = await supabase
     .from('station_accounts')
-    .select('id, name, station_code, is_active')
+    .select('id, name, station_code, is_active, diesel_price_per_liter, gasoline_price_per_liter')
     .eq('id', stationId)
     .maybeSingle()
 
@@ -410,7 +410,7 @@ export async function serveFuelRequest(req, res, next) {
 
     const id = Number(req.params.id)
     const servedLiters = parsePositiveNumber(req.body?.served_liters)
-    const amount = parseOptionalNumber(req.body?.amount)
+    
 
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ success: false, message: 'Identifiant demande invalide.' })
@@ -418,10 +418,6 @@ export async function serveFuelRequest(req, res, next) {
 
     if (req.body?.served_liters === undefined || Number.isNaN(servedLiters)) {
       return res.status(400).json({ success: false, message: 'La quantité servie doit être un nombre supérieur à 0.' })
-    }
-
-    if (amount !== null && (Number.isNaN(amount) || amount < 0)) {
-      return res.status(400).json({ success: false, message: 'Le montant doit être un nombre valide.' })
     }
 
     const existing = await getFuelRequestByIdInternal(id)
@@ -444,14 +440,38 @@ export async function serveFuelRequest(req, res, next) {
       return res.status(400).json({ success: false, message: `La quantité servie ne peut pas dépasser ${maxAllowed} L.` })
     }
 
-    const updatePayload = {
-      pump_attendant_id: Number(req.auth.userId),
-      served_liters: servedLiters,
-      status: 'served',
-      served_at: new Date().toISOString()
-    }
+    const station = await getStationById(Number(req.auth.stationId))
 
-    if (amount !== null) updatePayload.amount = amount
+if (!station || !station.is_active) {
+  return res.status(404).json({
+    success: false,
+    message: 'Station introuvable ou inactive.'
+  })
+}
+
+const fuelType = String(existing.fuel_type || '').toLowerCase()
+
+const unitPrice =
+  fuelType === 'essence'
+    ? Number(station.gasoline_price_per_liter || 0)
+    : Number(station.diesel_price_per_liter || 0)
+
+if (!unitPrice || unitPrice <= 0) {
+  return res.status(400).json({
+    success: false,
+    message: 'Prix carburant non configuré pour cette station.'
+  })
+}
+
+const calculatedAmount = servedLiters * unitPrice
+
+    const updatePayload = {
+  pump_attendant_id: Number(req.auth.userId),
+  served_liters: servedLiters,
+  amount: calculatedAmount,
+  status: 'served',
+  served_at: new Date().toISOString()
+}
 
     const { data, error } = await supabase
       .from('fuel_requests')

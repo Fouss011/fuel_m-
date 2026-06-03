@@ -25,56 +25,121 @@ export default function StationManagerDashboardScreen({ navigation }) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [pinCode, setPinCode] = useState('')
+  const [dieselPrice, setDieselPrice] = useState('')
+  const [gasolinePrice, setGasolinePrice] = useState('')
+  const [savingPrices, setSavingPrices] = useState(false)
 
   useEffect(() => {
     loadDashboard()
   }, [])
 
   async function loadDashboard() {
-    try {
-      setLoading(true)
+  try {
+    setLoading(true)
 
-      const session = await getStoredSession()
-      const stationId = session?.stationId || session?.station_id
+    const session = await getStoredSession()
+    const stationId = session?.stationId || session?.station_id
 
-      if (!stationId) {
-        Alert.alert('Session invalide', 'Station introuvable dans la session.')
-        return
-      }
-
-      setStation({
-        id: stationId,
-        name: session?.stationName || session?.station_name || 'Ma station',
-        station_code: session?.stationCode || session?.station_code
-      })
-
-      const [transactionsResponse, attendantsResponse] = await Promise.all([
-  api.get('/station/transactions', {
-    params: {
-      period: 'all'
+    if (!stationId) {
+      Alert.alert('Session invalide', 'Station introuvable dans la session.')
+      return
     }
-  }),
-  api.get('/station/pump-attendants')
-])
 
-      const transactionData = transactionsResponse?.data?.data || []
-      const attendantData =
-        attendantsResponse?.data?.data?.pump_attendants ||
-        attendantsResponse?.data?.pump_attendants ||
-        []
+    setStation({
+      id: stationId,
+      name: session?.stationName || session?.station_name || 'Ma station',
+      station_code: session?.stationCode || session?.station_code
+    })
 
-      setTransactions(Array.isArray(transactionData) ? transactionData : [])
-      setPumpAttendants(Array.isArray(attendantData) ? attendantData : [])
-    } catch (error) {
-      const message =
-        error?.response?.data?.message ||
-        'Impossible de charger le tableau de bord station.'
+    const [transactionsResponse, attendantsResponse] = await Promise.all([
+      api.get('/station/transactions', {
+        params: {
+          period: 'all'
+        }
+      }),
+      api.get('/station/pump-attendants')
+    ])
 
-      Alert.alert('Erreur', message)
-    } finally {
-      setLoading(false)
+    const transactionData = transactionsResponse?.data?.data || []
+
+    const attendantData =
+      attendantsResponse?.data?.data?.pump_attendants ||
+      attendantsResponse?.data?.pump_attendants ||
+      []
+
+    const stationData =
+      attendantsResponse?.data?.data?.station ||
+      attendantsResponse?.data?.station ||
+      null
+
+    setTransactions(Array.isArray(transactionData) ? transactionData : [])
+    setPumpAttendants(Array.isArray(attendantData) ? attendantData : [])
+
+    if (stationData) {
+      setStation((prev) => ({
+        ...(prev || {}),
+        ...stationData
+      }))
+
+      setDieselPrice(String(stationData.diesel_price_per_liter || ''))
+      setGasolinePrice(String(stationData.gasoline_price_per_liter || ''))
     }
+  } catch (error) {
+    const message =
+      error?.response?.data?.message ||
+      'Impossible de charger le tableau de bord station.'
+
+    Alert.alert('Erreur', message)
+  } finally {
+    setLoading(false)
   }
+}
+
+async function saveFuelPrices() {
+  const diesel = Number(String(dieselPrice || '').replace(',', '.'))
+  const gasoline = Number(String(gasolinePrice || '').replace(',', '.'))
+
+  if (!diesel || diesel <= 0) {
+    Alert.alert('Prix invalide', 'Entre un prix gasoil valide.')
+    return
+  }
+
+  if (!gasoline || gasoline <= 0) {
+    Alert.alert('Prix invalide', 'Entre un prix essence valide.')
+    return
+  }
+
+  try {
+    setSavingPrices(true)
+
+    const response = await api.patch('/station/prices', {
+      diesel_price_per_liter: diesel,
+      gasoline_price_per_liter: gasoline
+    })
+
+    const updatedStation = response?.data?.data
+
+    if (updatedStation) {
+      setStation((prev) => ({
+        ...(prev || {}),
+        ...updatedStation
+      }))
+
+      setDieselPrice(String(updatedStation.diesel_price_per_liter || diesel))
+      setGasolinePrice(String(updatedStation.gasoline_price_per_liter || gasoline))
+    }
+
+    Alert.alert('Succès', 'Prix carburants mis à jour.')
+  } catch (error) {
+    Alert.alert(
+      'Erreur',
+      error?.response?.data?.message ||
+        'Impossible de mettre à jour les prix carburants.'
+    )
+  } finally {
+    setSavingPrices(false)
+  }
+}
 
   async function createPumpAttendant() {
     try {
@@ -274,6 +339,41 @@ export default function StationManagerDashboardScreen({ navigation }) {
         </>
       ) : (
         <>
+
+        <View style={styles.sectionCard}>
+  <Text style={styles.sectionTitle}>Prix carburants</Text>
+  <Text style={styles.sectionText}>
+    Ces prix seront utilisés automatiquement pour calculer le montant des transactions servies.
+  </Text>
+
+  <TextInput
+    style={styles.input}
+    placeholder="Prix gasoil / litre"
+    placeholderTextColor="#64748B"
+    value={dieselPrice}
+    onChangeText={setDieselPrice}
+    keyboardType="numeric"
+  />
+
+  <TextInput
+    style={styles.input}
+    placeholder="Prix essence / litre"
+    placeholderTextColor="#64748B"
+    value={gasolinePrice}
+    onChangeText={setGasolinePrice}
+    keyboardType="numeric"
+  />
+
+  <TouchableOpacity
+    style={[styles.createButton, savingPrices && styles.disabledButton]}
+    onPress={saveFuelPrices}
+    disabled={savingPrices}
+  >
+    <Text style={styles.createButtonText}>
+      {savingPrices ? 'Enregistrement...' : 'Enregistrer les prix'}
+    </Text>
+  </TouchableOpacity>
+</View>
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Créer un pompiste</Text>
             <Text style={styles.sectionText}>

@@ -33,7 +33,6 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
 
   const [search, setSearch] = useState('')
   const [servedLitersById, setServedLitersById] = useState({})
-  const [amountById, setAmountById] = useState({})
 
   useFocusEffect(
     useCallback(() => {
@@ -134,20 +133,11 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
     }))
   }
 
-  function updateAmount(id, value) {
-    setAmountById((prev) => ({
-      ...prev,
-      [id]: value
-    }))
-  }
-
   async function handleServe(item) {
     const approvedLiters = Number(item.approved_liters || item.requested_liters || 0)
     const servedLitersRaw = servedLitersById[item.id]
-    const amountRaw = amountById[item.id]
 
     const servedLiters = Number(String(servedLitersRaw || '').replace(',', '.'))
-    const amount = Number(String(amountRaw || '').replace(',', '.'))
 
     if (!servedLiters || servedLiters <= 0) {
       Alert.alert('Quantité invalide', 'Entre la quantité réellement servie.')
@@ -162,30 +152,18 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
       return
     }
 
-    if (!amount || amount <= 0) {
-      Alert.alert('Montant invalide', 'Entre le montant réel de la transaction.')
-      return
-    }
-
     try {
       setServingId(item.id)
 
       await serveFuelRequest(item.id, {
-        served_liters: servedLiters,
-        amount,
-        station_id: session?.stationId || session?.station_id,
-        pump_attendant_id: session?.userId || session?.user_id
-      })
+  served_liters: servedLiters,
+  station_id: session?.stationId || session?.station_id,
+  pump_attendant_id: session?.userId || session?.user_id
+})
 
       Alert.alert('Carburant servi', 'La transaction a été validée avec succès.')
 
       setServedLitersById((prev) => {
-        const next = { ...prev }
-        delete next[item.id]
-        return next
-      })
-
-      setAmountById((prev) => {
         const next = { ...prev }
         delete next[item.id]
         return next
@@ -266,15 +244,9 @@ export default function PumpAttendantDashboardScreen({ navigation }) {
           style={styles.input}
         />
 
-        <Text style={styles.label}>Montant réel</Text>
-        <TextInput
-          {...INPUT_PROPS}
-          value={amountById[item.id] || ''}
-          onChangeText={(value) => updateAmount(item.id, value)}
-          placeholder="Ex : 32000"
-          keyboardType="numeric"
-          style={styles.input}
-        />
+        <Text style={styles.autoAmountText}>
+  Le montant sera calculé automatiquement avec le prix fixé par la station.
+</Text>
 
         <TouchableOpacity
           style={[styles.serveButton, servingId === item.id && styles.disabledButton]}
@@ -546,5 +518,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 21,
     fontWeight: '700'
-  }
+  },
+
+  autoAmountText: {
+  color: '#92400E',
+  fontWeight: '800',
+  backgroundColor: '#FEF3C7',
+  borderRadius: 14,
+  padding: 12,
+  marginBottom: 12,
+  lineHeight: 20
+}
 })
