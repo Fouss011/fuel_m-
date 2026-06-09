@@ -230,21 +230,32 @@ export default function StationLoginScreen({ navigation }) {
           <Text style={styles.sectionTitle}>Connexion station</Text>
 
           <TextInput
-            {...INPUT_PROPS}
-            value={stationCode}
-            onChangeText={(value) => setStationCode(value.toUpperCase())}
-            placeholder="Code station"
-            autoCapitalize="characters"
-            style={styles.input}
-          />
+  {...INPUT_PROPS}
+  value={stationCode}
+  onChangeText={(value) => setStationCode(value.toUpperCase())}
+  placeholder="Code station"
+  autoCapitalize="characters"
+  autoCorrect={false}
+  autoComplete="off"
+  importantForAutofill="no"
+  blurOnSubmit={false}
+  style={styles.input}
+/>
 
-          <PasswordInput
-            value={pinCode}
-            onChangeText={setPinCode}
-            placeholder="Mot de passe responsable station"
-            visible={showLoginPin}
-            onToggle={() => setShowLoginPin(!showLoginPin)}
-          />
+          <TextInput
+  {...INPUT_PROPS}
+  value={pinCode}
+  onChangeText={setPinCode}
+  placeholder="Mot de passe responsable station"
+  secureTextEntry
+  keyboardType="number-pad"
+  autoCapitalize="none"
+  autoCorrect={false}
+  autoComplete="off"
+  importantForAutofill="no"
+  blurOnSubmit={false}
+  style={styles.input}
+/>
 
           <TouchableOpacity
             style={styles.primaryButton}
